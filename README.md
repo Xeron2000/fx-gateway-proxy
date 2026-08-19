@@ -27,8 +27,8 @@ Works out-of-the-box with **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Cod
 
 | Model ID | Provider | Context Window | Max Output | Features |
 | :--- | :--- | :---: | :---: | :--- |
-| `zai/glm-5.2` | Z.AI | 1,000,000 | 128,000 | Reasoning, Tool Calling, Vision, Prompt Caching |
-| `zai/glm-5.2-fast` | Z.AI | 1,000,000 | 128,000 | Fast Inference, Tool Calling, Vision, Prompt Caching |
+| `zai/glm-5.2` | Blackbox AI | 1,000,000 | 128,000 | Reasoning, Tool Calling, Vision, Prompt Caching |
+| `zai/glm-5.2-fast` | Blackbox AI | 1,000,000 | 128,000 | Fast Inference, Tool Calling, Vision, Prompt Caching |
 
 ---
 

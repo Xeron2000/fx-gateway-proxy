@@ -3,6 +3,12 @@ name: Build and Publish Docker Image to GHCR
 on:
   push:
     branches: [ "main", "master" ]
+    paths:
+      - "fx_gateway_proxy/**"
+      - "fx-gateway-proxy.py"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
     tags: [ "v*.*.*", "v*" ]
   workflow_dispatch:
 
