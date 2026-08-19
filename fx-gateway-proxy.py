@@ -246,6 +246,30 @@ def get_key_pool(explicit_key: str = "") -> KeyPool:
 # OpenAI <-> Vercel AI SDK v3 converters
 # --------------------------------------------------------------------------- #
 
+def _extract_text(content: Any) -> str:
+    """Extract pure text from content, whether it's a string, list of blocks, or None."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts = []
+        for item in content:
+            if isinstance(item, str):
+                texts.append(item)
+            elif isinstance(item, dict):
+                if item.get("type") in ("text", "input_text", "output_text"):
+                    texts.append(item.get("text", ""))
+                elif "text" in item and isinstance(item["text"], str):
+                    texts.append(item["text"])
+            else:
+                texts.append(str(item))
+        return "".join(texts)
+    if isinstance(content, dict):
+        return content.get("text", "") if "text" in content else ""
+    return str(content)
+
+
 def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OpenAI messages structure to Vercel AI SDK v3 Language Model prompt format."""
     prompt = []
@@ -256,7 +280,7 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
         if role in ("system", "developer"):
             prompt.append({
                 "role": "system",
-                "content": content if isinstance(content, str) else str(content or "")
+                "content": _extract_text(content)
             })
         elif role == "user":
             parts = []
@@ -280,15 +304,24 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
                                 ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
                                 media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/png")
                                 parts.append({"type": "file", "mediaType": media, "data": url})
+                        elif "text" in item:
+                            txt = str(item["text"])
+                            parts.append({"type": "text", "text": txt if txt.strip() else " "})
+                    elif isinstance(item, str):
+                        parts.append({"type": "text", "text": item if item.strip() else " "})
                     else:
                         parts.append({"type": "text", "text": str(item) if str(item).strip() else " "})
             else:
-                parts.append({"type": "text", "text": str(content) if content and str(content).strip() else " "})
+                txt = _extract_text(content)
+                parts.append({"type": "text", "text": txt if txt.strip() else " "})
+            if not parts:
+                parts.append({"type": "text", "text": " "})
             prompt.append({"role": "user", "content": parts})
         elif role == "assistant":
             parts = []
-            if content:
-                parts.append({"type": "text", "text": content if isinstance(content, str) else str(content)})
+            text = _extract_text(content)
+            if text and text.strip():
+                parts.append({"type": "text", "text": text})
             tool_calls = msg.get("tool_calls")
             if tool_calls:
                 for tc in tool_calls:
@@ -310,7 +343,12 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
         elif role == "tool":
             tool_call_id = msg.get("tool_call_id", "")
             tool_name = msg.get("name", "tool")
-            out_str = content if isinstance(content, str) else json.dumps(content or "")
+            if isinstance(content, str):
+                out_str = content
+            elif isinstance(content, (dict, list)):
+                out_str = json.dumps(content)
+            else:
+                out_str = str(content or "")
             prompt.append({
                 "role": "tool",
                 "content": [{
