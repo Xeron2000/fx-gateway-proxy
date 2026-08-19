@@ -46,6 +46,14 @@ def _backoff_delay(attempt: int) -> float:
     return min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
 
 
+async def _parse_json_body(request: Request):
+    """Parse JSON body, returning (body, error_response). error_response is None on success."""
+    try:
+        return await request.json(), None
+    except Exception:
+        return None, JSONResponse(status_code=400, content={"error": {"message": "Invalid JSON body", "type": "invalid_request_error", "code": 400}})
+
+
 def _extract_auth(request: Request, authorization: Optional[str]) -> str:
     """Unified key extraction: Bearer, x-api-key, X-Api-Key."""
     if authorization:
@@ -234,7 +242,7 @@ async def _chat_stream_to_response_stream(chat_response: StreamingResponse, requ
         yield _response_event("response.output_text.done", {"item_id": message_id, "output_index": message_output_index, "content_index": 0, "text": "".join(text_parts)})
         yield _response_event("response.content_part.done", {"item_id": message_id, "output_index": message_output_index, "content_index": 0, "part": message_item["content"][0]})
         yield _response_event("response.output_item.done", {"output_index": message_output_index, "item": message_item})
-    output.sort(key=lambda item: item.get("id", ""))
+    # output is already in arrival order (reasoning -> tool_calls -> message); do not re-sort.
     status = "incomplete" if finish_reason == "length" else "completed"
     final = _response_metadata(response_id, model, created_at, status)
     final.update({"output": output, "output_text": "".join(text_parts), "usage": _response_usage(usage), "instructions": request_body.get("instructions"), "metadata": request_body.get("metadata") or {}, "store": bool(request_body.get("store", False)), "truncation": request_body.get("truncation", "disabled")})
@@ -539,34 +547,41 @@ def create_app() -> FastAPI:
         # ponytail: retry budget is FX_MAX_KEY_RETRIES+1 regardless of pool size
         attempts = MAX_KEY_RETRIES + 1
 
+        async def _acquire_upstream():
+            """Run the retry/rotation loop once, returning (response, key, t_start).
+            Caller owns response lifecycle (must aclose()). Raises on exhausted network errors."""
+            response = None
+            key = ""
+            t_start = time.time()
+            for attempt in range(attempts):
+                key = key_pool.next()
+                t_start = time.time()
+                try:
+                    req = client.build_request("POST", UPSTREAM_URL, headers=build_headers(key), json=v3_payload)
+                    response = await client.send(req, stream=True)
+                except Exception as e:
+                    if attempt + 1 < attempts:
+                        wait_time = _backoff_delay(attempt)
+                        logger.warning(f"fx: network exception on key={mask_key(key)}: {e}; retrying in {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+                    raise
+                if response.status_code in RETRYABLE_STATUS and attempt + 1 < attempts:
+                    if response.status_code == 429:
+                        key_pool.mark_failed(key)
+                        logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; backing off {_backoff_delay(attempt)}s")
+                    else:
+                        key_pool.mark_error(key)
+                        logger.warning(f"fx: {response.status_code} error on key={mask_key(key)}; retrying next key")
+                    await response.aclose()
+                    await asyncio.sleep(_backoff_delay(attempt))
+                    continue
+                break
+            return response, key, t_start
+
         async def stream_generator() -> AsyncGenerator[str, None]:
             try:
-                response = None
-                key = ""
-                for attempt in range(attempts):
-                    key = key_pool.next()
-                    t_start = time.time()
-                    try:
-                        req = client.build_request("POST", UPSTREAM_URL, headers=build_headers(key), json=v3_payload)
-                        response = await client.send(req, stream=True)
-                    except Exception as e:
-                        if attempt + 1 < attempts:
-                            wait_time = _backoff_delay(attempt)
-                            logger.warning(f"fx: network exception on key={mask_key(key)}: {e}; retrying in {wait_time}s")
-                            await asyncio.sleep(wait_time)
-                            continue
-                        raise
-                    if response.status_code in RETRYABLE_STATUS and attempt + 1 < attempts:
-                        if response.status_code == 429:
-                            key_pool.mark_failed(key)
-                            logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; backing off {_backoff_delay(attempt)}s")
-                        else:
-                            key_pool.mark_error(key)
-                            logger.warning(f"fx: {response.status_code} error on key={mask_key(key)}; retrying next key")
-                        await response.aclose()
-                        await asyncio.sleep(_backoff_delay(attempt))
-                        continue
-                    break
+                response, key, t_start = await _acquire_upstream()
                 async with _response_scope(response):
                     if response.status_code != 200:
                         err_bytes = await response.aread()
@@ -576,8 +591,10 @@ def create_app() -> FastAPI:
                             key_pool.mark_failed(key)
                         else:
                             key_pool.mark_error(key)
-                        chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {"content": f"\n[Gateway Error {response.status_code}]: {err_msg}"}, "finish_reason": "error"}]}
-                        yield f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n"
+                        # ponytail: emit error in `error` field + standard finish_reason=stop so clients
+                        # treat it as a failure rather than model text. (SSE already started; status stays 200.)
+                        err_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "error": {"message": f"Gateway Error {response.status_code}: {err_msg}", "type": "upstream_error", "code": response.status_code}}
+                        yield f"data: {json.dumps(err_chunk)}\n\n"
                         return
                     tool_call_indices: Dict[str, int] = {}
                     current_tool_idx = 0
@@ -738,7 +755,9 @@ def create_app() -> FastAPI:
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, authorization: Optional[str] = Header(None)):
-        body = await request.json()
+        body, err = await _parse_json_body(request)
+        if err:
+            return err
         auth = _extract_auth(request, authorization)
         try:
             result = await _proxy_chat(body, request, auth)
@@ -749,7 +768,9 @@ def create_app() -> FastAPI:
 
     @app.post("/v1/responses")
     async def responses(request: Request, authorization: Optional[str] = Header(None)):
-        body = await request.json()
+        body, err = await _parse_json_body(request)
+        if err:
+            return err
         chat_body = _responses_to_chat_body(body)
         auth = _extract_auth(request, authorization)
         try:
@@ -759,11 +780,7 @@ def create_app() -> FastAPI:
         if isinstance(result, StreamingResponse):
             return StreamingResponse(_chat_stream_to_response_stream(result, body), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
         if isinstance(result, Response):
-            # error passthrough: map to Responses error shape
-            try:
-                err_data = json.loads(result.body.decode()) if hasattr(result, "body") else {}
-            except Exception:
-                err_data = {}
+            # upstream error passthrough; OpenAI-style error body is already valid for Responses API.
             return result
         return _chat_to_response(result, body)
 
@@ -773,7 +790,9 @@ def create_app() -> FastAPI:
         # count_tokens endpoint: approximate via chat usage? For now return estimated tokens without upstream call
         path = request.url.path
         if path.endswith("count_tokens"):
-            body = await request.json()
+            body, err = await _parse_json_body(request)
+            if err:
+                return err
             # handle both string and list content for anthropic messages
             def _count_text(c):
                 if isinstance(c, str):
@@ -797,7 +816,9 @@ def create_app() -> FastAPI:
             # rough: 1 token ~ 4 chars
             cnt = max(1, len(txt) // 4 + len(sys_txt) // 4)
             return {"input_tokens": cnt}
-        body = await request.json()
+        body, err = await _parse_json_body(request)
+        if err:
+            return err
         # anthropic-version header is optional for our proxy, but log if missing
         chat_body = _anthropic_to_chat_body(body)
         # Anthropic sends x-api-key, not Authorization
