@@ -211,8 +211,6 @@ async def list_models():
     models = [
         {"id": "zai/glm-5.2", "object": "model", "owned_by": "zai", "permission": []},
         {"id": "zai/glm-5.2-fast", "object": "model", "owned_by": "zai", "permission": []},
-        {"id": "meta/muse-spark-1.2-contributor", "object": "model", "owned_by": "meta", "permission": []},
-        {"id": "google/gemini-2.5-flash", "object": "model", "owned_by": "google", "permission": []},
     ]
     return {"object": "list", "data": models}
 
