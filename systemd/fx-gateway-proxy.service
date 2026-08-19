@@ -1,0 +1,14 @@
+[Unit]
+Description=FX Gateway Reverse Proxy for Vercel AI Free Models
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/uv run --script %h/.local/bin/fx-gateway-proxy.py
+Restart=always
+RestartSec=3
+Environment=PORT=18080
+Environment=HOST=127.0.0.1
+
+[Install]
+WantedBy=default.target

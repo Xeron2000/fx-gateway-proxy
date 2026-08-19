@@ -1,0 +1,13 @@
+services:
+  fx-gateway-proxy:
+    build: .
+    container_name: fx-gateway-proxy
+    restart: unless-stopped
+    ports:
+      - "18080:18080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=18080
+      - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+    volumes:
+      - ~/.fx:/root/.fx:ro
