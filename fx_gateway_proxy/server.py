@@ -3,6 +3,7 @@ import json
 import uuid
 import asyncio
 import logging
+import os
 from typing import Any, AsyncGenerator, Dict, List, Optional
 from contextlib import asynccontextmanager
 
@@ -31,6 +32,14 @@ from .converter import (
 logger = logging.getLogger("fx-gateway-proxy")
 
 http_client: Optional[httpx.AsyncClient] = None
+BASE_DELAY = float(os.environ.get("FX_BASE_DELAY", "0.8"))
+MAX_DELAY = float(os.environ.get("FX_MAX_DELAY", "20.0"))
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _backoff_delay(attempt: int) -> float:
+    """Exponential backoff: min(BASE_DELAY * 2^attempt, MAX_DELAY)."""
+    return min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
 
 
 @asynccontextmanager
@@ -132,7 +141,7 @@ def create_app() -> FastAPI:
         v3_payload: Dict[str, Any] = {
             "prompt": prompt,
             "maxOutputTokens": max_tokens,
-            "headers": {"user-agent": USER_AGENT}
+            "headers": {"user-agent": USER_AGENT, "x-title": "fx"}
         }
 
         # Transparent sampling parameter mappings
@@ -195,17 +204,27 @@ def create_app() -> FastAPI:
                 for attempt in range(attempts):
                     key = key_pool.next()
                     t_start = time.time()
-                    req = client.build_request("POST", UPSTREAM_URL, headers=build_headers(key), json=v3_payload)
-                    response = await client.send(req, stream=True)
+                    try:
+                        req = client.build_request("POST", UPSTREAM_URL, headers=build_headers(key), json=v3_payload)
+                        response = await client.send(req, stream=True)
+                    except Exception as e:
+                        if attempt + 1 < attempts:
+                            wait_time = _backoff_delay(attempt)
+                            logger.warning(f"fx: network exception on key={mask_key(key)}: {e}; retrying in {wait_time}s")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        raise
                     
-                    if response.status_code in (429, 503) and attempt + 1 < attempts:
+                    if response.status_code in RETRYABLE_STATUS and attempt + 1 < attempts:
                         if response.status_code == 429:
                             key_pool.mark_failed(key)
                             logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; rotating to next key")
                         else:
                             key_pool.mark_error(key)
-                            logger.warning(f"fx: 503 error on key={mask_key(key)}; retrying next key")
+                            logger.warning(f"fx: {response.status_code} error on key={mask_key(key)}; retrying next key")
                         await response.aclose()
+                        if len(key_pool.keys) == 1:
+                            await asyncio.sleep(_backoff_delay(attempt))
                         continue
                     break
 
@@ -383,16 +402,27 @@ def create_app() -> FastAPI:
         for attempt in range(attempts):
             key = key_pool.next()
             t_start = time.time()
-            req = client.build_request("POST", UPSTREAM_URL, headers=build_headers(key), json=v3_payload)
-            response = await client.send(req, stream=True)
-            if response.status_code in (429, 503) and attempt + 1 < attempts:
+            try:
+                req = client.build_request("POST", UPSTREAM_URL, headers=build_headers(key), json=v3_payload)
+                response = await client.send(req, stream=True)
+            except Exception as e:
+                if attempt + 1 < attempts:
+                    wait_time = _backoff_delay(attempt)
+                    logger.warning(f"fx: network exception on key={mask_key(key)}: {e}; retrying in {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise
+
+            if response.status_code in RETRYABLE_STATUS and attempt + 1 < attempts:
                 if response.status_code == 429:
                     key_pool.mark_failed(key)
                     logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; rotating to next key")
                 else:
                     key_pool.mark_error(key)
-                    logger.warning(f"fx: 503 error on key={mask_key(key)}; retrying next key")
+                    logger.warning(f"fx: {response.status_code} error on key={mask_key(key)}; retrying next key")
                 await response.aclose()
+                if len(key_pool.keys) == 1:
+                    await asyncio.sleep(_backoff_delay(attempt))
                 continue
             break
 

@@ -27,7 +27,16 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
                             txt = item.get("text", "")
                             parts.append({"type": "text", "text": txt if txt.strip() else " "})
                         elif item.get("type") == "image_url":
-                            parts.append({"type": "image", "image": item.get("image_url", {}).get("url", "")})
+                            url = item.get("image_url", {}).get("url", "")
+                            # AI SDK v3 expects {type: "file", mediaType, data}; data may be a URL or base64.
+                            if url.startswith("data:"):
+                                header, _, b64 = url.partition(",")
+                                media = header.split(";")[0].split(":")[1] if ":" in header else "image/png"
+                                parts.append({"type": "file", "mediaType": media, "data": b64})
+                            else:
+                                ext = url.rsplit(".", 1)[-1].lower() if "." in url else "png"
+                                media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/png")
+                                parts.append({"type": "file", "mediaType": media, "data": url})
                     else:
                         parts.append({"type": "text", "text": str(item) if str(item).strip() else " "})
             else:
