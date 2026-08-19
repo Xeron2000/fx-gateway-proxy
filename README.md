@@ -45,9 +45,13 @@ This automatically authenticates and stores your API key at `~/.fx/api-key`. **T
 
 The proxy listens on `http://127.0.0.1:18080/v1` by default.
 
-### Method 1: Single-file Execution with `uv` (Recommended)
+### Method 1: Remote Execution with `uv` / `uvx` (Recommended - Zero Install)
 
 ```bash
+# Option A: Run directly from GitHub repo via uvx
+uvx --from git+https://github.com/Xeron2000/fx-gateway-proxy.git fx-gateway-proxy
+
+# Option B: Run standalone script directly from raw URL
 uv run --script https://raw.githubusercontent.com/Xeron2000/fx-gateway-proxy/main/fx-gateway-proxy.py
 ```
 
