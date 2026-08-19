@@ -621,6 +621,7 @@ async def chat_completions(
 
                 tool_call_indices: Dict[str, int] = {}
                 current_tool_idx = 0
+                stream_finished = False
 
                 async for line in response.aiter_lines():
                     if await request.is_disconnected():
@@ -731,6 +732,7 @@ async def chat_completions(
 
                         usage_dict = extract_usage(event)
                         key_pool.mark_success(key, usage_dict["total_tokens"], time.time() - t_start)
+                        stream_finished = True
 
                         chunk = {
                             "id": req_id,
@@ -746,6 +748,22 @@ async def chat_completions(
                         }
                         yield f"data: {json.dumps(chunk)}\n\n"
                         yield "data: [DONE]\n\n"
+
+                if not stream_finished:
+                    logger.warning(f"Upstream stream ended abruptly without finish event on key={mask_key(key)}, appending graceful stop chunk.")
+                    guard_chunk = {
+                        "id": req_id,
+                        "object": "chat.completion.chunk",
+                        "created": created_ts,
+                        "model": model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop"
+                        }]
+                    }
+                    yield f"data: {json.dumps(guard_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
         except asyncio.CancelledError:
             logger.info("Stream task cancelled by client.")
             raise
