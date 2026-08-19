@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![LINUX DO](https://img.shields.io/badge/Community-LINUX%20DO-blue?style=flat&logo=discourse&logoColor=white)](https://linux.do)
+[![LINUX DO](https://img.shields.io/badge/社区-LINUX%20DO-blue?style=flat&logo=discourse&logoColor=white)](https://linux.do)
 [![CI](https://github.com/Xeron2000/fx-gateway-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/Xeron2000/fx-gateway-proxy/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -10,70 +10,70 @@
 
 **[English](README.md)** | **[简体中文](README_CN.md)**
 
-> 🤝 **Friendly Links**: [LINUX DO Community](https://linux.do)
+> 🤝 **友情链接**: [LINUX DO 论坛](https://linux.do)
 
 </div>
 
 ---
 
-OpenAI-compatible reverse proxy for Vercel AI Gateway's promotional free pool (**GLM 5.2 / GLM 5.2 Fast**).
+专为 Vercel AI Gateway 免费促销池（**GLM 5.2 / GLM 5.2 Fast**）打造的 OpenAI 兼容协议反向代理服务器。
 
-Works out of the box with **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Code**, and standard OpenAI SDKs.
+开箱即用，原生支持 **Pi**、**Cursor**、**Cline**、**Aider**、**Claude Code** 及任意标准 OpenAI SDK。
 
 ---
 
-## 🎯 Models
+## 🎯 模型支持
 
-| Model ID | Provider | Context | Output | Features |
+| 模型 ID | 提供方 | 上下文窗口 | 单次最大输出 | 特性 |
 | :--- | :--- | :---: | :---: | :--- |
-| `zai/glm-5.2` | Zhipu AI / ZAI | 1,000,000 | 128,000 | Deep Reasoning, Tool Calling, Vision, Prompt Caching |
-| `zai/glm-5.2-fast` | Zhipu AI / ZAI | 1,000,000 | 128,000 | Ultra Fast, Tool Calling, Vision, Prompt Caching |
+| `zai/glm-5.2` | 智谱 AI / ZAI | 1,000,000 | 128,000 | 深度思考 (Reasoning)、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
+| `zai/glm-5.2-fast` | 智谱 AI / ZAI | 1,000,000 | 128,000 | 极速响应、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
 
 ---
 
-## 🔑 Step 1: Obtain Vercel AI Gateway API Key
+## 🔑 第一步：获取 Vercel AI Gateway API Key
 
-Choose **either** method:
+支持以下**任意一种**方式：
 
-### Option A: Via `fx` CLI (Recommended & Automated)
-If you have `fx` installed, run:
+### 方式 A：通过 `fx` CLI 登录（推荐，全自动）
+如果本地安装了 `fx`，直接在终端执行：
 ```bash
 fx login
 ```
-This stores your API key at `~/.fx/api-key`. **The proxy will automatically detect and read this file.**
+登录成功后密钥将自动保存在 `~/.fx/api-key`。**反代服务启动时会自动识别并读取该文件。**
 
-### Option B: Via Vercel Web Dashboard
-1. Go to [Vercel AI Gateway API Keys](https://vercel.com/~/ai-gateway/api-keys).
-2. Create an API Key (`vck_...`).
-3. Set it as an environment variable:
+### 方式 B：通过 Vercel 控制台手动创建
+1. 打开 [Vercel AI Gateway 控制台](https://vercel.com/~/ai-gateway/api-keys)。
+2. 创建一个 API Key（格式为 `vck_...`）。
+3. 设置为环境变量：
    ```bash
-   export AI_GATEWAY_API_KEY="vck_your_api_key_here"
+   export AI_GATEWAY_API_KEY="vck_你的密钥"
    ```
 
 ---
 
-## 🚀 Step 2: Start the Reverse Proxy
+## 🚀 第二步：启动反向代理服务
 
-Default endpoint: `http://127.0.0.1:18080/v1`
+服务默认监听端口：`http://127.0.0.1:18080/v1`
 
-### Method 1: Remote Execution with `uv` / `uvx` (Zero Install)
+### 方法 1：通过 `uv` / `uvx` 远端直接运行（免安装环境，推荐）
 
 ```bash
-# Option A: Run directly from GitHub repo via uvx
+# 方式 A：通过 uvx 从 GitHub 仓库一键启动
 uvx --from git+https://github.com/Xeron2000/fx-gateway-proxy.git fx-gateway-proxy
 
-# Option B: Run standalone script from raw URL
+# 方式 B：通过 uv run 运行远端单文件脚本
 uv run --script https://raw.githubusercontent.com/Xeron2000/fx-gateway-proxy/main/fx-gateway-proxy.py
 ```
 
-### Method 2: Systemd User Service (Background Daemon)
+### 方法 2：Systemd 用户服务（后台常驻守护）
 
 ```bash
-# 1. Copy script
+# 1. 复制单文件脚本
 cp fx_gateway_proxy/cli.py ~/.local/bin/fx-gateway-proxy.py
 chmod +x ~/.local/bin/fx-gateway-proxy.py
 
-# 2. Add systemd service
+# 2. 配置 Systemd 服务
 mkdir -p ~/.config/systemd/user
 cat << 'SERVICE' > ~/.config/systemd/user/fx-gateway-proxy.service
 [Unit]
@@ -92,12 +92,12 @@ Environment=HOST=127.0.0.1
 WantedBy=default.target
 SERVICE
 
-# 3. Enable & start
+# 3. 启用并启动服务
 systemctl --user daemon-reload
 systemctl --user enable --now fx-gateway-proxy.service
 ```
 
-### Method 3: Docker Compose
+### 方法 3：Docker Compose 容器部署
 
 ```bash
 docker compose up -d
@@ -105,11 +105,11 @@ docker compose up -d
 
 ---
 
-## ⚙️ Step 3: Configure Clients
+## ⚙️ 第三步：配置客户端接入
 
 ### 1. `pi` Coding Agent
 
-Add to `~/.pi/agent/models.json`:
+编辑 `~/.pi/agent/models.json`，在 `providers` 中添加 `vercel-fx`：
 
 ```json
 {
@@ -162,11 +162,11 @@ Add to `~/.pi/agent/models.json`:
 }
 ```
 
-> **Note on `apiKey`**:
-> - `"apiKey": "dummy"`: The proxy automatically resolves the real key from `~/.fx/api-key` or `AI_GATEWAY_API_KEY`.
-> - You can also pass `"apiKey": "vck_..."` explicitly.
+> **关于 `apiKey` 的说明**：
+> - 填 `"apiKey": "dummy"`：反代会自动从 `~/.fx/api-key` 或 `AI_GATEWAY_API_KEY` 环境变量中提取真实密钥。
+> - 亦可直接填写显式密钥 `"apiKey": "vck_..."`。
 
-**Launch Pi**:
+**启动 Pi 体验**：
 ```bash
 pi --provider vercel-fx --model zai/glm-5.2
 ```
@@ -175,13 +175,14 @@ pi --provider vercel-fx --model zai/glm-5.2
 
 ### 2. Cursor / VSCode / Cline / Continue
 
+在编辑器设置中配置 OpenAI 兼容接口：
 - **Base URL**: `http://127.0.0.1:18080/v1`
-- **API Key**: `dummy` (or `vck_...`)
-- **Model**: `zai/glm-5.2` or `zai/glm-5.2-fast`
+- **API Key**: `dummy`（或你的 `vck_...`）
+- **Model**: `zai/glm-5.2` 或 `zai/glm-5.2-fast`
 
 ---
 
-### 3. OpenAI Python SDK
+### 3. Python OpenAI SDK 调用示例
 
 ```python
 from openai import OpenAI
@@ -190,7 +191,7 @@ client = OpenAI(base_url="http://127.0.0.1:18080/v1", api_key="dummy")
 
 response = client.chat.completions.create(
     model="zai/glm-5.2",
-    messages=[{"role": "user", "content": "Hello!"}],
+    messages=[{"role": "user", "content": "你好，请介绍一下你自己"}],
     stream=True
 )
 
@@ -200,14 +201,14 @@ for chunk in response:
 
 ---
 
-## 🔒 Authentication Resolution Hierarchy
+## 🔒 密钥自动解析优先级
 
-1. `Authorization: Bearer <vck_...>` header
-2. `AI_GATEWAY_API_KEY` environment variable
-3. Local credential file: `~/.fx/api-key` (generated by `fx login`)
+1. 请求头：`Authorization: Bearer <vck_...>`
+2. 环境变量：`AI_GATEWAY_API_KEY`
+3. 本地凭证文件：`~/.fx/api-key`（由 `fx login` 自动生成）
 
 ---
 
-## 🛡️ License
+## 🛡️ 开源协议
 
 [MIT](LICENSE)
