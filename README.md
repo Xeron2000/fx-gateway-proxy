@@ -8,7 +8,20 @@
 
 An OpenAI-compatible high-performance reverse proxy for the **Vercel AI Gateway (FX Promotional Pool)**.
 
-Enables you to use top-tier models like **GLM 5.2 / GLM 5.2 Fast (1M context)**, **Gemini 2.5 Flash**, and **Muse Spark** with any standard OpenAI-compatible tool or coding agent (such as **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Code**, **LibreChat**, and official OpenAI SDKs).
+Enables you to use free top-tier models like **GLM 5.2 / GLM 5.2 Fast (1M context)** with any standard OpenAI-compatible tool or coding agent (such as **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Code**, **LibreChat**, and official OpenAI SDKs).
+
+---
+
+## 🎯 Model Availability & Testing Status
+
+| Model ID | Provider | Status | Free Pool (No Card) | Context Window | Max Output | Features |
+| :--- | :--- | :---: | :---: | :--- | :--- | :--- |
+| `zai/glm-5.2` | Zhipu AI / ZAI | 🟢 Active | ✅ **Free (Zero Cost)** | 1,000,000 | 128,000 | Deep Reasoning, Tool Calling, Vision, Prompt Caching |
+| `zai/glm-5.2-fast` | Zhipu AI / ZAI | 🟢 Active | ✅ **Free (Zero Cost)** | 1,000,000 | 128,000 | Ultra Fast, Tool Calling, Vision, Prompt Caching |
+| `meta/muse-spark-1.2-contributor` | Meta | 🟡 Standard | ❌ Requires Card on Vercel | 128,000 | 8,192 | Fast Code & Chat |
+| `google/gemini-2.5-flash` | Google | 🟡 Standard | ❌ Requires Card on Vercel | 1,000,000 | 8,192 | Multimodal & Fast Reasoning |
+
+> **Note**: Vercel currently grants zero-card free promotional access exclusively to the **ZAI GLM-5.2 series** (`zai/glm-5.2` & `zai/glm-5.2-fast`). Other models route to the standard gateway and require a verified credit card on your Vercel account.
 
 ---
 
@@ -24,17 +37,6 @@ Enables you to use top-tier models like **GLM 5.2 / GLM 5.2 Fast (1M context)**,
   - Global `httpx.AsyncClient` keep-alive connection pooling.
   - Early disconnect handling (aborts upstream gateway tasks on client disconnect / `Ctrl+C`).
   - Zero-config credential resolution (reads from incoming Bearer token, `AI_GATEWAY_API_KEY`, or `~/.fx/api-key`).
-
----
-
-## 🎯 Supported Models
-
-| Model ID | Provider | Context Window | Max Output | Features |
-| :--- | :--- | :--- | :--- | :--- |
-| `zai/glm-5.2` | Zhipu AI / ZAI | 1,000,000 | 128,000 | Deep Reasoning, Tool Calling, Vision, Prompt Caching |
-| `zai/glm-5.2-fast` | Zhipu AI / ZAI | 1,000,000 | 128,000 | High Speed, Tool Calling, Vision, Prompt Caching |
-| `meta/muse-spark-1.2-contributor` | Meta | 128,000 | 8,192 | Fast Code & Chat |
-| `google/gemini-2.5-flash` | Google | 1,000,000 | 8,192 | Multimodal & Fast Reasoning |
 
 ---
 
@@ -60,16 +62,6 @@ uv run fx-gateway-proxy --host 127.0.0.1 --port 18080
 
 ```bash
 docker compose up -d
-```
-
-Or with pure Docker:
-
-```bash
-docker run -d \
-  --name fx-gateway-proxy \
-  -p 18080:18080 \
-  -v ~/.fx:/root/.fx:ro \
-  ghcr.io/xeron2000/fx-gateway-proxy:latest
 ```
 
 ### Method 3: Systemd User Service (Linux Background Daemon)
@@ -104,7 +96,7 @@ docker run -d \
 
 ---
 
-## ⚙️ Configuration & Client Integrations
+## ⚙️ Client Integrations
 
 The proxy listens on `http://127.0.0.1:18080/v1` by default.
 
@@ -173,11 +165,6 @@ Add the `vercel-fx` provider to `~/.pi/agent/models.json`:
 }
 ```
 
-Now switch models directly in Pi:
-```bash
-pi --provider vercel-fx --model zai/glm-5.2
-```
-
 ### 2. Cursor / VSCode / Cline / Continue
 
 Configure OpenAI-compatible settings in your editor/extension:
@@ -192,7 +179,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://127.0.0.1:18080/v1",
-    api_key="dummy"  # Auto-resolved if ~/.fx/api-key or AI_GATEWAY_API_KEY is present
+    api_key="dummy"
 )
 
 response = client.chat.completions.create(
