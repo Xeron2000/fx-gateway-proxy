@@ -44,24 +44,26 @@ Works out-of-the-box with **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Cod
 
 ---
 
-## 🔑 Step 1: Supply Your API Keys
+## 🔑 Step 1: Obtain & Configure Your API Keys
 
-Keys can be configured in any of the following ways:
+Create your API Key (format: `vck_...`) directly from the **[Vercel AI Gateway Console](https://vercel.com/ai-gateway)**.
 
-### Option A: `fx login` (Single key)
+Keys can be configured into the proxy in any of the following ways:
+
+### Option A: Environment Variables (Recommended)
 ```bash
-fx login
-```
-Saves your key to `~/.fx/api-key`.
-
-### Option B: Multi-Key Environment or File (Recommended)
-Add one key per line in `~/.fx/api-key`, or set via environment variable:
-```bash
-# Multi-key (comma or newline separated)
+# Multi-key (comma or newline separated, linearly scales rate limits)
 export AI_GATEWAY_API_KEYS="vck_key1...,vck_key2...,vck_key3..."
 
 # Single key
 export AI_GATEWAY_API_KEY="vck_key1..."
+```
+
+### Option B: Local Credential File (One key per line)
+Write your key(s) into `~/.fx/api-key` (one per line). The proxy automatically detects and reads this file at runtime:
+```bash
+mkdir -p ~/.fx
+echo "vck_your_key" >> ~/.fx/api-key
 ```
 
 ---

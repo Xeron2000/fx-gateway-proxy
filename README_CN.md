@@ -45,25 +45,26 @@
 
 ---
 
-## 🔑 第一步：配置 API Key
+## 🔑 第一步：获取与配置 API Key
 
-支持以下**任意一种**配置方式（单 Key 或多 Key 自动轮换）：
+前往 **[Vercel AI Gateway 控制台](https://vercel.com/ai-gateway)** 创建 API Key（格式为 `vck_...`）。
 
-### 方式 A：通过 `fx` CLI 登录（单 Key / 自动生成）
-如果本地安装了 `fx`，直接在终端执行：
+支持以下方式配置到反代中（单 Key 或多 Key 自动轮换）：
+
+### 方式 A：环境变量注入（推荐）
 ```bash
-fx login
-```
-登录成功后密钥保存在 `~/.fx/api-key`。**反代服务启动时会自动识别并读取该文件。**
-
-### 方式 B：配置多 Key（推荐，突破单 Key 限流）
-可在 `~/.fx/api-key` 中每行填入一把 Key，或通过环境变量注入（逗号/换行分隔）：
-```bash
-# 多 Key 环境变量（多账号汇聚）
+# 多 Key 环境变量（多账号汇聚，逗号或换行分隔，线性倍增并发配额）
 export AI_GATEWAY_API_KEYS="vck_key1...,vck_key2...,vck_key3..."
 
 # 单 Key 环境变量
 export AI_GATEWAY_API_KEY="vck_key1..."
+```
+
+### 方式 B：本地凭据文件（一行一个 Key）
+将你的 Key 写入 `~/.fx/api-key` 文件中（单行或多行均可），服务启动时会自动识别并读取：
+```bash
+mkdir -p ~/.fx
+echo "vck_你的密钥" >> ~/.fx/api-key
 ```
 
 ---
@@ -266,7 +267,7 @@ for chunk in response:
 
 1. 请求头：`Authorization: Bearer <vck_...>`
 2. 环境变量：`AI_GATEWAY_API_KEYS`（逗号/换行分隔）或 `AI_GATEWAY_API_KEY`
-3. 本地凭证文件：`~/.fx/api-key`（由 `fx login` 自动生成或手动添加多行）
+3. 本地凭证文件：`~/.fx/api-key`（单行或多行均可）
 
 ---
 
