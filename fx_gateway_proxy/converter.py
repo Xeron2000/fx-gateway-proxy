@@ -2,6 +2,7 @@ import json
 import uuid
 from typing import Any, Dict, List, Optional
 
+
 def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OpenAI messages structure to Vercel AI SDK v3 Language Model prompt format."""
     prompt = []
@@ -26,21 +27,7 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
                             txt = item.get("text", "")
                             parts.append({"type": "text", "text": txt if txt.strip() else " "})
                         elif item.get("type") == "image_url":
-                            url = item.get("image_url", {}).get("url", "")
-                            # AI SDK v3 expects {type: "file", mediaType, data}; data may be a URL or base64.
-                            # ponytail: glm-5.2 has no vision, but keep the conversion correct for models that do.
-                            if url.startswith("data:"):
-                                # data URI: split mediaType and base64 data
-                                header, _, b64 = url.partition(",")
-                                media = header.split(";")[0].split(":")[1] if ":" in header else "image/png"
-                                parts.append({"type": "file", "mediaType": media, "data": b64})
-                            else:
-                                # plain URL: pass as data, infer mediaType from extension
-                                media = "image/png" if url.lower().endswith((".jpg", ".jpeg")) else "image/png"
-                                if url.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                                    ext = url.rsplit(".", 1)[-1].lower()
-                                    media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/png")
-                                parts.append({"type": "file", "mediaType": media, "data": url})
+                            parts.append({"type": "image", "image": item.get("image_url", {}).get("url", "")})
                     else:
                         parts.append({"type": "text", "text": str(item) if str(item).strip() else " "})
             else:
@@ -65,6 +52,8 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
                         "toolName": fn.get("name", ""),
                         "input": args if isinstance(args, dict) else {}
                     })
+            if not parts:
+                parts.append({"type": "text", "text": " "})
             prompt.append({"role": "assistant", "content": parts})
         elif role == "tool":
             tool_call_id = msg.get("tool_call_id", "")
@@ -76,10 +65,11 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
                     "type": "tool-result",
                     "toolCallId": tool_call_id,
                     "toolName": tool_name,
-                    "output": {"type": "text", "value": out_str}
+                    "output": {"type": "text", "value": out_str or "{}"}
                 }]
             })
     return prompt
+
 
 def convert_tools_to_v3(tools: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
     """Convert OpenAI tools format to Vercel AI SDK v3 function tools."""
@@ -99,6 +89,7 @@ def convert_tools_to_v3(tools: Optional[List[Dict[str, Any]]]) -> Optional[List[
             v3_tools.append(t)
     return v3_tools
 
+
 def convert_tool_choice_to_v3(tc: Any) -> Optional[Dict[str, Any]]:
     """Convert OpenAI tool_choice parameter to Vercel AI SDK v3 toolChoice format."""
     if not tc:
@@ -114,11 +105,12 @@ def convert_tool_choice_to_v3(tc: Any) -> Optional[Dict[str, Any]]:
             return tc
     return {"type": "auto"}
 
+
 def map_reasoning_effort(effort: Optional[str]) -> Optional[str]:
     """Map client thinking/reasoning effort level to Vercel format."""
     if not effort:
         return None
-    effort_lower = effort.lower()
+    effort_lower = str(effort).lower()
     if effort_lower in ("xhigh", "max"):
         return "xhigh"
     if effort_lower == "high":
@@ -129,7 +121,9 @@ def map_reasoning_effort(effort: Optional[str]) -> Optional[str]:
         return "none"
     return effort
 
+
 def extract_usage(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize Vercel usage payload into OpenAI usage object."""
     usage_obj = event.get("usage") or {}
     raw_u = usage_obj.get("raw") or {}
     in_tokens = usage_obj.get("inputTokens") or {}
