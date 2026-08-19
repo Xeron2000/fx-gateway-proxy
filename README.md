@@ -4,6 +4,7 @@
 
 [![LINUX DO](https://img.shields.io/badge/Community-LINUX%20DO-blue?style=flat&logo=discourse&logoColor=white)](https://linux.do)
 [![CI](https://github.com/Xeron2000/fx-gateway-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/Xeron2000/fx-gateway-proxy/actions)
+[![Docker Image](https://img.shields.io/badge/docker-GHCR-blue.svg?logo=docker&logoColor=white)](https://github.com/Xeron2000/fx-gateway-proxy/pkgs/container/fx-gateway-proxy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/managed%20by-uv-261230.svg)](https://github.com/astral-sh/uv)
@@ -69,7 +70,56 @@ export AI_GATEWAY_API_KEY="vck_key1..."
 
 Default endpoint: `http://127.0.0.1:18080/v1`
 
-### Method 1: Direct via `uvx` / `uv run` (Zero install)
+### 🏆 Method 1: Docker Container (Recommended, Prebuilt Multi-Arch GHCR Image)
+
+Zero local setup required, supports `linux/amd64` and `linux/arm64`:
+
+#### Option A: Direct Docker Run (Reading local ~/.fx/api-key)
+```bash
+docker run -d \
+  --name fx-gateway-proxy \
+  --restart unless-stopped \
+  -p 18080:18080 \
+  -v ~/.fx:/root/.fx:ro \
+  ghcr.io/xeron2000/fx-gateway-proxy:latest
+```
+
+#### Option B: Inject Multi-Key via Environment
+```bash
+docker run -d \
+  --name fx-gateway-proxy \
+  --restart unless-stopped \
+  -p 18080:18080 \
+  -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2,vck_key3" \
+  ghcr.io/xeron2000/fx-gateway-proxy:latest
+```
+
+#### Option C: Docker Compose
+Create `docker-compose.yml`:
+```yaml
+services:
+  fx-gateway-proxy:
+    image: ghcr.io/xeron2000/fx-gateway-proxy:latest
+    container_name: fx-gateway-proxy
+    restart: unless-stopped
+    ports:
+      - "18080:18080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=18080
+      - AI_GATEWAY_API_KEYS=${AI_GATEWAY_API_KEYS:-}
+      - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+    volumes:
+      - ~/.fx:/root/.fx:ro
+```
+Run:
+```bash
+docker compose up -d
+```
+
+---
+
+### Method 2: Direct via `uvx` / `uv run` (Zero install)
 
 ```bash
 # Option A: Run directly from GitHub via uvx
@@ -79,17 +129,9 @@ uvx --from git+https://github.com/Xeron2000/fx-gateway-proxy.git fx-gateway-prox
 uv run --script https://raw.githubusercontent.com/Xeron2000/fx-gateway-proxy/main/fx-gateway-proxy.py
 ```
 
-### Method 3: Docker Container (Prebuilt GHCR Image)
+---
 
-```bash
-# Option A: Direct docker run (multi-arch linux/amd64 and linux/arm64)
-docker run -d   --name fx-gateway-proxy   --restart unless-stopped   -p 18080:18080   -v ~/.fx:/root/.fx:ro   -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2"   ghcr.io/xeron2000/fx-gateway-proxy:latest
-
-# Option B: Docker compose
-docker compose up -d
-```
-
-### Method 2: Systemd User Service
+### Method 3: Systemd User Service
 
 ```bash
 cp fx-gateway-proxy.py ~/.local/bin/fx-gateway-proxy.py

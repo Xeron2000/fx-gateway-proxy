@@ -4,6 +4,7 @@
 
 [![LINUX DO](https://img.shields.io/badge/社区-LINUX%20DO-blue?style=flat&logo=discourse&logoColor=white)](https://linux.do)
 [![CI](https://github.com/Xeron2000/fx-gateway-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/Xeron2000/fx-gateway-proxy/actions)
+[![Docker Image](https://img.shields.io/badge/docker-GHCR-blue.svg?logo=docker&logoColor=white)](https://github.com/Xeron2000/fx-gateway-proxy/pkgs/container/fx-gateway-proxy)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/managed%20by-uv-261230.svg)](https://github.com/astral-sh/uv)
@@ -16,7 +17,7 @@
 
 ---
 
-专为 Vercel AI Gateway 免费促销池（**GLM 5.2 / GLM 5.2 Fast**）打造的 OpenAI 兼容协议反向代理服务器。
+专为 Vercel AI Gateway 免费促销池（**GLM 5.2 / GLM 5.2 Fast**）打造的 OpenAI 兼容协议反向代理服务器，内置**多 Key 自适应负载路由与智能冷却退避**。
 
 开箱即用，原生支持 **Pi**、**Cursor**、**Cline**、**Aider**、**Claude Code** 及任意标准 OpenAI SDK。
 
@@ -46,14 +47,14 @@
 
 ## 🔑 第一步：配置 API Key
 
-支持以下**任意一种**配置方式（支持单 Key 或多 Key 自动轮换）：
+支持以下**任意一种**配置方式（单 Key 或多 Key 自动轮换）：
 
 ### 方式 A：通过 `fx` CLI 登录（单 Key / 自动生成）
 如果本地安装了 `fx`，直接在终端执行：
 ```bash
 fx login
 ```
-登录成功后密钥将自动保存在 `~/.fx/api-key`。**反代服务启动时会自动识别并读取该文件。**
+登录成功后密钥保存在 `~/.fx/api-key`。**反代服务启动时会自动识别并读取该文件。**
 
 ### 方式 B：配置多 Key（推荐，突破单 Key 限流）
 可在 `~/.fx/api-key` 中每行填入一把 Key，或通过环境变量注入（逗号/换行分隔）：
@@ -71,7 +72,56 @@ export AI_GATEWAY_API_KEY="vck_key1..."
 
 服务默认监听端口：`http://127.0.0.1:18080/v1`
 
-### 方法 1：通过 `uv` / `uvx` 远端直接运行（免安装环境，推荐）
+### 🏆 方法 1：Docker 容器部署（首选推荐，直接拉取 GHCR 预编译镜像）
+
+无需本地安装 Python / uv 环境，支持 `linux/amd64` 与 `linux/arm64`（Apple Silicon / VPS）：
+
+#### 选项 A：单命令行直接运行（读取本地 ~/.fx/api-key）
+```bash
+docker run -d \
+  --name fx-gateway-proxy \
+  --restart unless-stopped \
+  -p 18080:18080 \
+  -v ~/.fx:/root/.fx:ro \
+  ghcr.io/xeron2000/fx-gateway-proxy:latest
+```
+
+#### 选项 B：环境变量注入多 Key 运行
+```bash
+docker run -d \
+  --name fx-gateway-proxy \
+  --restart unless-stopped \
+  -p 18080:18080 \
+  -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2,vck_key3" \
+  ghcr.io/xeron2000/fx-gateway-proxy:latest
+```
+
+#### 选项 C：通过 Docker Compose 启动
+创建 `docker-compose.yml`：
+```yaml
+services:
+  fx-gateway-proxy:
+    image: ghcr.io/xeron2000/fx-gateway-proxy:latest
+    container_name: fx-gateway-proxy
+    restart: unless-stopped
+    ports:
+      - "18080:18080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=18080
+      - AI_GATEWAY_API_KEYS=${AI_GATEWAY_API_KEYS:-}
+      - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+    volumes:
+      - ~/.fx:/root/.fx:ro
+```
+后台启动：
+```bash
+docker compose up -d
+```
+
+---
+
+### 方法 2：通过 `uv` / `uvx` 远端直接运行（免安装环境）
 
 ```bash
 # 方式 A：通过 uvx 从 GitHub 仓库一键启动
@@ -81,7 +131,9 @@ uvx --from git+https://github.com/Xeron2000/fx-gateway-proxy.git fx-gateway-prox
 uv run --script https://raw.githubusercontent.com/Xeron2000/fx-gateway-proxy/main/fx-gateway-proxy.py
 ```
 
-### 方法 2：Systemd 用户服务（后台常驻守护）
+---
+
+### 方法 3：Systemd 用户服务（Linux 后台常驻守护）
 
 ```bash
 # 1. 复制单文件脚本
@@ -110,16 +162,6 @@ SERVICE
 # 3. 启用并启动服务
 systemctl --user daemon-reload
 systemctl --user enable --now fx-gateway-proxy.service
-```
-
-### 方法 3：Docker 容器部署（直接拉取 GHCR 镜像）
-
-```bash
-# 方式 A：直接运行 GHCR 预编译镜像（支持 linux/amd64 与 linux/arm64）
-docker run -d   --name fx-gateway-proxy   --restart unless-stopped   -p 18080:18080   -v ~/.fx:/root/.fx:ro   -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2"   ghcr.io/xeron2000/fx-gateway-proxy:latest
-
-# 方式 B：通过 docker compose 启动
-docker compose up -d
 ```
 
 ---
@@ -182,7 +224,7 @@ docker compose up -d
 ```
 
 > **关于 `apiKey` 的说明**：
-> - 填 `"apiKey": "dummy"`：反代会自动从 `~/.fx/api-key` 或 `AI_GATEWAY_API_KEY` 环境变量中提取真实密钥。
+> - 填 `"apiKey": "dummy"`：反代会自动从 `~/.fx/api-key` 或 `AI_GATEWAY_API_KEYS` 环境变量中提取真实密钥。
 > - 亦可直接填写显式密钥 `"apiKey": "vck_..."`。
 
 **启动 Pi 体验**：
