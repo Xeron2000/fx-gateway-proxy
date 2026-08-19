@@ -208,6 +208,80 @@ for chunk in response:
 
 ---
 
+## 🛣️ Gateway Channels: fx vs eve
+
+Vercel AI Gateway exposes two promotional entry points for the free GLM 5.2 pool. Both route to the **same Blackbox `system` credential pool** (cost: $0, no balance deduction) under the hood — they differ only in endpoint version, User-Agent, and identifying headers.
+
+| Dimension | **fx channel** (default) | **eve channel** |
+| --- | --- | --- |
+| Endpoint | `/v3/ai/language-model` | `/v4/ai/language-model` |
+| HTTP `User-Agent` | `fx/0.0.3` | `eve/0.39.1 ai-sdk-agent/tool-loop ...` |
+| `body.headers` | `{user-agent, x-title}` | `{user-agent, x-title}` |
+| Extra header | `HTTP-Referer: github.com/vercel-labs/fx` | `ai-gateway-auth-method: api-key` |
+| API key | same `vck_...` | same `vck_...` |
+| Routed provider | Blackbox (`credentialType: system`) | Blackbox (`credentialType: system`) |
+| Cost | $0 | $0 |
+
+### What actually triggers the free pool
+
+The promo is **not** keyed on the key, the IP, or the endpoint version. The gateway recognizes a promo request by **two markers that must both be present**:
+
+1. HTTP `User-Agent` starting with `fx/` or `eve/` (case-sensitive)
+2. The request body's `headers` object containing **both** `user-agent` **and** `x-title`
+
+Drop either marker and the gateway returns `customer_verification_required` (asks for a credit card on file). The exact UA value does not matter as long as the prefix matches.
+
+### Do you need the eve channel?
+
+**No.** This proxy uses the fx channel by default and it is equivalent to eve for the free promo:
+
+- Same key, same Blackbox `system` credential, same $0 cost, same balance behavior
+- Cross-verified: `fx key + eve UA` ✓, `eve key + fx UA` ✓ — all reach the free pool
+- The free tier **rate limit** is per-account-per-model, so switching channels does **not** bypass throttling
+
+An eve-channel mode is **not** implemented because it would add complexity for zero benefit. Override the channel markers via env if you ever need it:
+
+```bash
+FX_USER_AGENT="eve/0.39.1" UPSTREAM_URL=https://ai-gateway.vercel.sh/v4/ai/language-model uv run fx-gateway-proxy.py
+```
+
+---
+
+## 🚦 Rate Limiting & Retry
+
+The free tier enforces a **per-account, per-model** rate limit. It is **not** per-IP and **not** per-key — switching IPs or keys within the same Vercel team account will not reset it. Exceeding the limit returns `429 rate_limit_exceeded` with `providerAttemptCount: 0` (the request is rejected at the gateway layer, never reaching the provider).
+
+### Observed behavior
+
+- Serial requests: almost never throttled
+- Moderate concurrency (≈20 parallel): a few 429s, most succeed
+- High concurrency (≈30+ parallel): widespread 429s
+- Recovery window: short — a few tens of seconds
+
+So the limit is a burst/concurrency ceiling, not a hard RPM cap. Normal single-agent usage rarely hits it.
+
+### Built-in exponential backoff
+
+The proxy retries transient failures automatically — both streaming and non-streaming paths. Retriable status codes: `429, 500, 502, 503, 504`, plus network/connection exceptions.
+
+```python
+MAX_RETRIES  = 5                # default; env FX_MAX_RETRIES
+BASE_DELAY   = 0.8s            # env FX_BASE_DELAY
+MAX_DELAY    = 20.0s           # env FX_MAX_DELAY
+delay(attempt) = min(BASE_DELAY * 2**attempt, MAX_DELAY)
+# backoff series: 0.8 → 1.6 → 3.2 → 6.4 → 12.8 (capped at 20s)
+```
+
+After retries are exhausted the proxy surfaces the last error to the client (stream: an error chunk + `[DONE]`; non-stream: an HTTPException / JSONResponse with the upstream status).
+
+### Cannot bypass — only mitigate
+
+- The limit is account-level at the gateway; there is no client-side circumvention
+- Buying AI Gateway Credits upgrades to the paid tier (higher limits, but loses the free quota)
+- For bursty workloads, keep client-side concurrency modest (this proxy does not add a concurrency limiter by design — the agent loop is naturally serial)
+
+---
+
 ## 🤝 Community & Recommendation
 
 Special thanks and strong recommendation for **[LINUX DO](https://linux.do)** () — an active, sincere, and innovative community for geeks, AI explorers, and software developers.

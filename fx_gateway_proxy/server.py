@@ -24,8 +24,15 @@ from .converter import (
 logger = logging.getLogger("fx-gateway-proxy")
 
 http_client: Optional[httpx.AsyncClient] = None
-MAX_RETRIES = int(os.environ.get("FX_MAX_RETRIES", "3"))
-RETRY_DELAYS = [2.0, 4.0, 8.0]
+MAX_RETRIES = int(os.environ.get("FX_MAX_RETRIES", "5"))
+BASE_DELAY = float(os.environ.get("FX_BASE_DELAY", "0.8"))
+MAX_DELAY = float(os.environ.get("FX_MAX_DELAY", "20.0"))
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _backoff_delay(attempt: int) -> float:
+    """Exponential backoff: min(BASE_DELAY * 2^attempt, MAX_DELAY)."""
+    return min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -177,8 +184,8 @@ def create_app() -> FastAPI:
                         headers=v3_headers,
                         json=v3_payload,
                     ) as response:
-                        if response.status_code in (429, 503) and attempt < MAX_RETRIES:
-                            wait_time = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                        if response.status_code in RETRYABLE_STATUS and attempt < MAX_RETRIES:
+                            wait_time = _backoff_delay(attempt)
                             logger.warning(f"Upstream rate-limited ({response.status_code}), auto-retrying in {wait_time}s (attempt {attempt + 1}/{MAX_RETRIES})...")
                             await asyncio.sleep(wait_time)
                             attempt += 1
@@ -334,7 +341,7 @@ def create_app() -> FastAPI:
                     raise
                 except Exception as e:
                     if attempt < MAX_RETRIES:
-                        wait_time = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                        wait_time = _backoff_delay(attempt)
                         logger.warning(f"Stream network exception: {e}, auto-retrying in {wait_time}s (attempt {attempt + 1}/{MAX_RETRIES})...")
                         await asyncio.sleep(wait_time)
                         attempt += 1
@@ -363,8 +370,8 @@ def create_app() -> FastAPI:
                 headers=v3_headers,
                 json=v3_payload,
             ) as response:
-                if response.status_code in (429, 503) and attempt < MAX_RETRIES:
-                    wait_time = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                if response.status_code in RETRYABLE_STATUS and attempt < MAX_RETRIES:
+                    wait_time = _backoff_delay(attempt)
                     logger.warning(f"Upstream rate-limited ({response.status_code}), auto-retrying in {wait_time}s (attempt {attempt + 1}/{MAX_RETRIES})...")
                     await asyncio.sleep(wait_time)
                     attempt += 1

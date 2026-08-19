@@ -209,6 +209,80 @@ for chunk in response:
 
 ---
 
+## 🛣️ 网关通路：fx 与 eve
+
+Vercel AI Gateway 为免费 GLM 5.2 池提供两个促销入口。两者在底层都路由到**同一个 Blackbox `system` 凭证池**（cost: $0、不扣余额），区别仅在端点版本、User-Agent 和标识请求头。
+
+| 维度 | **fx 通路**（默认） | **eve 通路** |
+| --- | --- | --- |
+| 端点 | `/v3/ai/language-model` | `/v4/ai/language-model` |
+| HTTP `User-Agent` | `fx/0.0.3` | `eve/0.39.1 ai-sdk-agent/tool-loop ...` |
+| `body.headers` | `{user-agent, x-title}` | `{user-agent, x-title}` |
+| 额外请求头 | `HTTP-Referer: github.com/vercel-labs/fx` | `ai-gateway-auth-method: api-key` |
+| API key | 同一把 `vck_...` | 同一把 `vck_...` |
+| 路由到的 provider | Blackbox（`credentialType: system`） | Blackbox（`credentialType: system`） |
+| 计费 | $0 | $0 |
+
+### 真正触发免费池的开关
+
+促销**不**以 key、IP 或端点版本为键。网关识别促销请求靠**两个必须同时存在的标记**：
+
+1. HTTP `User-Agent` 以 `fx/` 或 `eve/` 开头（大小写敏感）
+2. 请求体 `headers` 对象**同时包含** `user-agent` **和** `x-title`
+
+缺任一标记，网关返回 `customer_verification_required`（要求绑定信用卡）。UA 的具体值不重要，只要前缀匹配即可。
+
+### 需要加 eve 通路吗？
+
+**不需要。** 本代理默认用 fx 通路，对免费促销而言与 eve 等价：
+
+- 同一把 key、同一个 Blackbox `system` 凭证、同样 $0、同样不扣余额
+- 交叉验证：`fx key + eve UA` ✓、`eve key + fx UA` ✓ —— 全部抵达免费池
+- 免费层的**限速**是按账号×按模型，换通路**不能**绕过限速
+
+没有实现 eve 通路是因为它只增复杂度、零收益。如确需切换，可用环境变量覆盖通路标记：
+
+```bash
+FX_USER_AGENT="eve/0.39.1" UPSTREAM_URL=https://ai-gateway.vercel.sh/v4/ai/language-model uv run fx-gateway-proxy.py
+```
+
+---
+
+## 🚦 限速与重试
+
+免费层强制**按账号、按模型**的限速。**不**是按 IP，**不**是按 key——在同一 Vercel 团队账号下换 IP 或换 key 都不会重置。超限返回 `429 rate_limit_exceeded`，且 `providerAttemptCount: 0`（请求在网关层就被拦，根本没到 provider）。
+
+### 实测表现
+
+- 串行请求：几乎不限速
+- 中等并发（约 20 并行）：少量 429，多数成功
+- 高并发（约 30+ 并行）：大量 429
+- 恢复窗口：短，约几十秒
+
+所以这是突发/并发上限，不是硬性 RPM 上限。正常单 agent 使用几乎不会触发。
+
+### 内置指数退避
+
+代理自动重试瞬时失败——流式和非流式路径都覆盖。可重试状态码：`429, 500, 502, 503, 504`，以及网络/连接异常。
+
+```python
+MAX_RETRIES  = 5                # 默认；环境变量 FX_MAX_RETRIES
+BASE_DELAY   = 0.8s            # 环境变量 FX_BASE_DELAY
+MAX_DELAY    = 20.0s           # 环境变量 FX_MAX_DELAY
+delay(attempt) = min(BASE_DELAY * 2**attempt, MAX_DELAY)
+# 退避序列：0.8 → 1.6 → 3.2 → 6.4 → 12.8（封顶 20s）
+```
+
+重试耗尽后，代理把最后的错误透传给客户端（流式：一个 error chunk + `[DONE]`；非流式：带上游状态码的 HTTPException / JSONResponse）。
+
+### 无法绕过——只能缓解
+
+- 限速在网关层按账号生效，客户端无法绕过
+- 购买 AI Gateway Credits 可升级到付费层（限速更高，但失去免费额度）
+- 突发负载请保持客户端并发适度（本代理设计上不加并发限制器——agent loop 天然串行）
+
+---
+
 ## 🤝 社区与友情推荐
 
 特别鸣谢并强烈推荐关注 **[LINUX DO 社区](https://linux.do)** ()：
