@@ -208,6 +208,12 @@ for chunk in response:
 
 ---
 
+## 🤝 Community & Recommendation
+
+Special thanks and strong recommendation for **[LINUX DO](https://linux.do)** () — an active, sincere, and innovative community for geeks, AI explorers, and software developers.
+
+---
+
 ## 🛡️ License
 
 [MIT](LICENSE)
