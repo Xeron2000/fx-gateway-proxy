@@ -43,7 +43,7 @@ fx login
 This stores your API key at `~/.fx/api-key`. **The proxy will automatically detect and read this file.**
 
 ### Option B: Via Vercel Web Dashboard
-1. Go to [Vercel AI Gateway API Keys](https://vercel.com/~/ai-gateway/api-keys).
+1. Go to [Vercel AI Gateway](https://vercel.com/ai-gateway).
 2. Create an API Key (`vck_...`).
 3. Set it as an environment variable:
    ```bash

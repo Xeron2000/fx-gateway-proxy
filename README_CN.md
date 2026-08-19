@@ -43,7 +43,7 @@ fx login
 登录成功后密钥将自动保存在 `~/.fx/api-key`。**反代服务启动时会自动识别并读取该文件。**
 
 ### 方式 B：通过 Vercel 控制台手动创建
-1. 打开 [Vercel AI Gateway 控制台](https://vercel.com/~/ai-gateway/api-keys)。
+1. 打开 [Vercel AI Gateway 控制台](https://vercel.com/ai-gateway)。
 2. 创建一个 API Key（格式为 `vck_...`）。
 3. 设置为环境变量：
    ```bash
