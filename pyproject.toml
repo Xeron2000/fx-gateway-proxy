@@ -1,7 +1,7 @@
 [project]
 name = "fx-gateway-proxy"
 version = "0.1.0"
-description = "OpenAI-compatible reverse proxy for Vercel AI Gateway FX promotional pool (GLM 5.2, Gemini 2.5, Muse Spark)"
+description = "OpenAI-compatible reverse proxy for Vercel AI Gateway FX promotional pool (GLM 5.2 / GLM 5.2 Fast)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
