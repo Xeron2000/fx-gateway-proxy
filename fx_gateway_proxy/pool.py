@@ -69,6 +69,8 @@ class KeyPool:
         """Pick the key with the best score: low current load, high success rate,
         plus jitter to avoid synchronized thundering. Skips cooling keys; if all
         are cooling, returns the one expiring soonest."""
+        if not self.keys:
+            raise RuntimeError("key pool is empty")
         now = time.time()
         available = [k for k in self.keys if self._stats[k].cooldown_until <= now]
         if not available:

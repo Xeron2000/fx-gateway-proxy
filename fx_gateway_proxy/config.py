@@ -45,7 +45,14 @@ def resolve_keys(explicit_key: str = "") -> List[str]:
             keys.extend(split_keys(DEFAULT_KEY_PATH.read_text()))
         except Exception:
             pass
-    return keys
+    # Dedup while preserving order (same key in both env vars shouldn't double-count).
+    seen = set()
+    out = []
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+            out.append(k)
+    return out
 
 
 def mask_key(key: str) -> str:

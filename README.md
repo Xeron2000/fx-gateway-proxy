@@ -41,6 +41,7 @@ Works out-of-the-box with **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Cod
   - Learns true RPM/TPM ceilings from 429 snapshots (0.8x) and high-load successes (1.1x).
   - Weighted selection: low-load keys win with anti-thundering jitter.
   - Automatic 429 exponential backoff cooldown (30s base, 300s cap) with seamless key rotation.
+- 🔌 **Triple Protocol Support**: `POST /v1/chat/completions` (OpenAI Chat), `POST /v1/responses` (OpenAI Responses), `POST /v1/messages` (Anthropic Messages) + `POST /v1/messages/count_tokens` — all share the same adaptive `KeyPool`, model aliasing (`claude-*`/`gpt-*` → `zai/glm-5.2(-fast)`) and `x-api-key`/`Authorization` auth.
 - 📊 **Live Stats Endpoint**: `GET /v1/stats` returns real-time masked metrics, loads, and cooldown states.
 - 🛡️ **Edge-Case Hardened**: Sanitizes empty user messages and structured multimodal payloads to prevent upstream validation errors.
 
@@ -204,6 +205,24 @@ Add to `~/.pi/agent/models.json`:
 ```
 
 ---
+
+## 🔌 Triple Protocol Examples
+
+All three protocols are proxied to the same Vercel pool:
+
+```bash
+# OpenAI Chat
+curl http://127.0.0.1:18080/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"zai/glm-5.2","messages":[{"role":"user","content":"hi"}]}'
+
+# OpenAI Responses
+curl http://127.0.0.1:18080/v1/responses -H "Content-Type: application/json" \
+  -d '{"model":"zai/glm-5.2","input":"hi","instructions":"You are helpful"}'
+
+# Anthropic Messages (x-api-key or Authorization)
+curl http://127.0.0.1:18080/v1/messages -H "Content-Type: application/json" -H "anthropic-version: 2023-06-01" -H "x-api-key: dummy" \
+  -d '{"model":"zai/glm-5.2","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}'
+```
 
 ## 🛣️ Gateway Pathways: fx vs eve In-Depth
 

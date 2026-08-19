@@ -40,6 +40,7 @@
   - 支持配置多把 Key，基于 60s 滑动窗口自动追踪各 Key 的 Request/Token 负载；
   - 动态学习每个 Key 的有效 RPM/TPM 上限，加权优先调度低负载 Key 并带抖动防惊群；
   - 遇到 429 速率限制时自动加入指数冷却退避（基准 30s，封顶 300s），并无感秒级轮换下一把可用 Key。
+- 🔌 **三协议兼容**：`POST /v1/chat/completions`（OpenAI Chat）、`POST /v1/responses`（OpenAI Responses）、`POST /v1/messages`（Anthropic Messages）+ `POST /v1/messages/count_tokens` —— 同享自适应 `KeyPool`、模型别名（`claude-*`/`gpt-*` → `zai/glm-5.2(-fast)`）与 `x-api-key`/`Authorization` 鉴权。
 - 📊 **实时指标监控**：提供 `GET /v1/stats` 端点，脱敏展示各 Key 实时负载率、成功数、429 触发数及估算上限。
 - 🛡️ **极限边界健壮性**：
   - 自动清洗客户端发送的空消息与空白字符，彻底避免 Vercel 400 校验错误；
@@ -261,6 +262,20 @@ response = client.chat.completions.create(
 
 for chunk in response:
     print(chunk.choices[0].delta.content or "", end="", flush=True)
+
+# OpenAI Responses API（同 baseUrl）
+resp = client.responses.create(
+    model="zai/glm-5.2",
+    input="hi, reply pong",
+    instructions="You are helpful"
+)
+print(resp.output_text)
+
+# Anthropic Messages API（baseUrl + x-api-key）
+import anthropic
+aclient = anthropic.Anthropic(base_url="http://127.0.0.1:18080/v1", api_key="dummy")
+msg = aclient.messages.create(model="zai/glm-5.2", max_tokens=100, messages=[{"role":"user","content":"hi"}])
+print(msg.content)
 ```
 
 ---
@@ -272,6 +287,24 @@ for chunk in response:
 3. 本地凭证文件：`~/.fx/api-key`（单行或多行均可）
 
 ---
+
+## 🔌 三协议调用示例
+
+三协议同享同一 Vercel 池与重试/别名：
+
+```bash
+# OpenAI Chat
+curl http://127.0.0.1:18080/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"zai/glm-5.2","messages":[{"role":"user","content":"hi"}]}'
+
+# OpenAI Responses
+curl http://127.0.0.1:18080/v1/responses -H "Content-Type: application/json" \
+  -d '{"model":"zai/glm-5.2","input":"hi","instructions":"You are helpful"}'
+
+# Anthropic Messages（x-api-key 或 Authorization 均可，claude-*/gpt-* 自动映射至 zai）
+curl http://127.0.0.1:18080/v1/messages -H "Content-Type: application/json" -H "anthropic-version: 2023-06-01" -H "x-api-key: dummy" \
+  -d '{"model":"zai/glm-5.2","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}'
+```
 
 ## 🛣️ 网关通路：fx 与 eve 深度解析
 
