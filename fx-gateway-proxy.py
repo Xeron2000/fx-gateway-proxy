@@ -565,7 +565,11 @@ async def chat_completions(
     }
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "18080"))
-    host = os.environ.get("HOST", "127.0.0.1")
-    logger.info(f"Starting FX Gateway Proxy on {host}:{port}...")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    import argparse
+    parser = argparse.ArgumentParser(description="FX Gateway Proxy")
+    parser.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"), help="Host to bind (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", 18080)), help="Port to bind (default: 18080)")
+    args = parser.parse_args()
+
+    logger.info(f"Starting FX Gateway Proxy on {args.host}:{args.port}...")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
