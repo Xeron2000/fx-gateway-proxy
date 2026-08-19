@@ -149,7 +149,48 @@ Add to `~/.pi/agent/models.json`:
 
 ---
 
-## 📊 Monitoring Live Metrics
+## 🛣️ Gateway Pathways: fx vs eve In-Depth
+
+Vercel AI Gateway provides two promotional entry points for the free GLM 5.2 pool. Both route to the **exact same Blackbox `system` credential pool** ($0 cost, no balance deductions).
+
+| Dimension | **fx Pathway** (Default) | **eve Pathway** |
+| --- | --- | --- |
+| Endpoint | `/v3/ai/language-model` | `/v4/ai/language-model` |
+| HTTP `User-Agent` | `fx/0.0.3` | `eve/0.39.1 ai-sdk-agent/tool-loop ...` |
+| `body.headers` | `{user-agent, x-title}` | `{user-agent, x-title}` |
+| Additional Header | `HTTP-Referer: github.com/vercel-labs/fx` | `ai-gateway-auth-method: api-key` |
+| Routing Destination | Blackbox (`credentialType: system`) | Blackbox (`credentialType: system`) |
+| Billing | $0 | $0 |
+
+### The Exact Trigger Switches for Free Promotion
+
+The promotion is **not** tied to IP or API key tier. The gateway matches promo requests based on **two mandatory flags**:
+1. HTTP `User-Agent` starts with `fx/` or `eve/` (case-sensitive)
+2. The JSON request body `headers` object contains both `user-agent` and `x-title`.
+
+---
+
+## 🚦 Rate Limits & Adaptive Retries
+
+The free tier enforces rate limits per account and per model. 
+
+### Built-in Exponential Backoff & Key Rotation
+
+The proxy automatically retries transient failures across `429, 500, 502, 503, 504`:
+
+```python
+MAX_RETRIES  = 5                # Environment variable FX_MAX_RETRIES
+BASE_DELAY   = 0.8s            # Environment variable FX_BASE_DELAY
+MAX_DELAY    = 20.0s           # Environment variable FX_MAX_DELAY
+delay(attempt) = min(BASE_DELAY * 2**attempt, MAX_DELAY)
+# Backoff sequence: 0.8 → 1.6 → 3.2 → 6.4 → 12.8 (capped at 20s)
+```
+
+In multi-key setups, a 429 key is placed in exponential backoff cooldown (30s~300s) and the proxy rotates instantly to the next available key.
+
+---
+
+## 📊 Live Metrics Monitoring
 
 ```bash
 curl http://127.0.0.1:18080/v1/stats
