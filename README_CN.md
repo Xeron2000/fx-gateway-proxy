@@ -112,9 +112,13 @@ systemctl --user daemon-reload
 systemctl --user enable --now fx-gateway-proxy.service
 ```
 
-### 方法 3：Docker Compose 容器部署
+### 方法 3：Docker 容器部署（直接拉取 GHCR 镜像）
 
 ```bash
+# 方式 A：直接运行 GHCR 预编译镜像（支持 linux/amd64 与 linux/arm64）
+docker run -d   --name fx-gateway-proxy   --restart unless-stopped   -p 18080:18080   -v ~/.fx:/root/.fx:ro   -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2"   ghcr.io/xeron2000/fx-gateway-proxy:latest
+
+# 方式 B：通过 docker compose 启动
 docker compose up -d
 ```
 

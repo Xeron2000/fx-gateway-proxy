@@ -1,5 +1,6 @@
 services:
   fx-gateway-proxy:
+    image: ghcr.io/xeron2000/fx-gateway-proxy:latest
     build: .
     container_name: fx-gateway-proxy
     restart: unless-stopped
@@ -9,5 +10,6 @@ services:
       - HOST=0.0.0.0
       - PORT=18080
       - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+      - AI_GATEWAY_API_KEYS=${AI_GATEWAY_API_KEYS:-}
     volumes:
       - ~/.fx:/root/.fx:ro
