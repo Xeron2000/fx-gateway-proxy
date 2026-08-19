@@ -179,14 +179,15 @@ def map_reasoning_effort(effort: Optional[str]) -> Optional[str]:
     return effort
 
 def extract_usage(event: Dict[str, Any]) -> Dict[str, Any]:
-    usage_obj = event.get("usage", {})
-    raw_u = usage_obj.get("raw", {})
-    in_tokens = usage_obj.get("inputTokens", {})
-    out_tokens = usage_obj.get("outputTokens", {})
+    usage_obj = event.get("usage") or {}
+    raw_u = usage_obj.get("raw") or {}
+    in_tokens = usage_obj.get("inputTokens") or {}
+    out_tokens = usage_obj.get("outputTokens") or {}
+    pt_details = raw_u.get("prompt_tokens_details") or {}
 
     prompt_tokens = raw_u.get("prompt_tokens") or in_tokens.get("total", 0)
     completion_tokens = raw_u.get("completion_tokens") or out_tokens.get("total", 0)
-    cached_tokens = raw_u.get("prompt_tokens_details", {}).get("cached_tokens", 0) or in_tokens.get("cacheRead", 0)
+    cached_tokens = pt_details.get("cached_tokens", 0) or in_tokens.get("cacheRead", 0)
     reasoning_tokens = raw_u.get("reasoning_tokens") or out_tokens.get("reasoning", 0)
 
     return {
