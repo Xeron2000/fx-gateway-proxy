@@ -21,7 +21,7 @@ import httpx
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("fx-gateway-proxy")
@@ -85,18 +85,20 @@ def convert_messages_to_v3(messages: List[Dict[str, Any]]) -> List[Dict[str, Any
         elif role == "user":
             parts = []
             if isinstance(content, str):
-                parts.append({"type": "text", "text": content})
+                # Ensure non-empty string to avoid Vercel AI SDK 400 validation error
+                parts.append({"type": "text", "text": content if content.strip() else " "})
             elif isinstance(content, list):
                 for item in content:
                     if isinstance(item, dict):
                         if item.get("type") == "text":
-                            parts.append({"type": "text", "text": item.get("text", "")})
+                            txt = item.get("text", "")
+                            parts.append({"type": "text", "text": txt if txt.strip() else " "})
                         elif item.get("type") == "image_url":
                             parts.append({"type": "image", "image": item.get("image_url", {}).get("url", "")})
                     else:
-                        parts.append({"type": "text", "text": str(item)})
+                        parts.append({"type": "text", "text": str(item) if str(item).strip() else " "})
             else:
-                parts.append({"type": "text", "text": str(content or "")})
+                parts.append({"type": "text", "text": str(content) if content and str(content).strip() else " "})
             prompt.append({"role": "user", "content": parts})
         elif role == "assistant":
             parts = []

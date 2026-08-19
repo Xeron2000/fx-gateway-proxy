@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 
 from .config import UPSTREAM_URL, USER_AGENT, get_api_key
 from .converter import (
@@ -341,8 +341,23 @@ def create_app() -> FastAPI:
             json=v3_payload,
         ) as response:
             if response.status_code != 200:
-                err_text = await response.aread()
-                raise HTTPException(status_code=response.status_code, detail=err_text.decode())
+                err_bytes = await response.aread()
+                err_str = err_bytes.decode(errors="replace")
+                try:
+                    err_json = json.loads(err_str)
+                    err_msg = err_json.get("error", {}).get("message") or err_str
+                except Exception:
+                    err_msg = err_str
+                return JSONResponse(
+                    status_code=response.status_code,
+                    content={
+                        "error": {
+                            "message": err_msg,
+                            "type": "upstream_error",
+                            "code": response.status_code
+                        }
+                    }
+                )
 
             finish_reason = "stop"
             async for line in response.aiter_lines():
@@ -392,9 +407,10 @@ def create_app() -> FastAPI:
 
                     usage_info = extract_usage(event)
 
+        content_str = "".join(full_content)
         res_message: Dict[str, Any] = {
             "role": "assistant",
-            "content": "".join(full_content) or None
+            "content": content_str if (content_str or not tool_calls_map) else None
         }
         if full_reasoning:
             res_message["reasoning_content"] = "".join(full_reasoning)
