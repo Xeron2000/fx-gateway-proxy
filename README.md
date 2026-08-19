@@ -27,8 +27,10 @@ Works out-of-the-box with **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Cod
 
 | Model ID | Provider | Context Window | Max Output | Features |
 | :--- | :--- | :---: | :---: | :--- |
-| `zai/glm-5.2` | Blackbox AI | 1,000,000 | 128,000 | Reasoning, Tool Calling, Vision, Prompt Caching |
-| `zai/glm-5.2-fast` | Blackbox AI | 1,000,000 | 128,000 | Fast Inference, Tool Calling, Vision, Prompt Caching |
+| `zai/glm-5.2` | Blackbox AI | 192,000¹ | 128,000 | Reasoning, Tool Calling, Vision, Prompt Caching |
+| `zai/glm-5.2-fast` | Blackbox AI | 192,000¹ | 128,000 | Fast Inference, Tool Calling, Vision, Prompt Caching |
+
+> ¹ Free pool via Vercel AI Gateway defaults to ~192k (max 202,752) on the non-`[1m]` variant; Vercel catalog reports 1,000,000 but free credits cannot access `zai/glm-5.2[1m]` (403 `customer_verification_required`). 1M requires paid credits. Verified: 192k OK, 195k+ → 413 `Request Entity Too Large`.
 
 ---
 
@@ -185,14 +187,14 @@ Add to `~/.pi/agent/models.json`:
           "id": "zai/glm-5.2",
           "name": "GLM 5.2 (FX Free)",
           "reasoning": true,
-          "contextWindow": 1000000,
+          "contextWindow": 192000,
           "maxTokens": 128000
         },
         {
           "id": "zai/glm-5.2-fast",
           "name": "GLM 5.2 Fast (FX Free)",
           "reasoning": true,
-          "contextWindow": 1000000,
+          "contextWindow": 192000,
           "maxTokens": 128000
         }
       ]

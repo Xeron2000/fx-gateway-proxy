@@ -27,8 +27,10 @@
 
 | 模型 ID | 提供方 | 上下文窗口 | 单次最大输出 | 特性 |
 | :--- | :--- | :---: | :---: | :--- |
-| `zai/glm-5.2` | Blackbox AI | 1,000,000 | 128,000 | 深度思考 (Reasoning)、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
-| `zai/glm-5.2-fast` | Blackbox AI | 1,000,000 | 128,000 | 极速响应、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
+| `zai/glm-5.2` | Blackbox AI | 192,000¹ | 128,000 | 深度思考 (Reasoning)、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
+| `zai/glm-5.2-fast` | Blackbox AI | 192,000¹ | 128,000 | 极速响应、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
+
+> ¹ 免费池经 Vercel AI Gateway 默认 ~192k（上限 202,752，非 `[1m]` 变体）；Vercel 目录标 1,000,000 但免费额度无法访问 `zai/glm-5.2[1m]`（403 需绑卡），1M 需付费。实测：192k 正常，195k+ → 413 `Request Entity Too Large`。
 
 ---
 
@@ -199,7 +201,7 @@ systemctl --user enable --now fx-gateway-proxy.service
             "max": null
           },
           "cost": { "input": 1.1, "output": 3.851, "cacheRead": 0.275, "cacheWrite": 0 },
-          "contextWindow": 1000000,
+          "contextWindow": 192000,
           "maxTokens": 128000
         },
         {
@@ -215,7 +217,7 @@ systemctl --user enable --now fx-gateway-proxy.service
             "max": null
           },
           "cost": { "input": 2.1, "output": 6.6, "cacheRead": 0.21, "cacheWrite": 0 },
-          "contextWindow": 1000000,
+          "contextWindow": 192000,
           "maxTokens": 128000
         }
       ]
