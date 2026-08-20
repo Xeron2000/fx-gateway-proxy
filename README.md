@@ -30,7 +30,18 @@ Works out-of-the-box with **Pi**, **Cursor**, **Cline**, **Aider**, **Claude Cod
 | `zai/glm-5.2` | Blackbox AI | 192,000¹ | 128,000 | Reasoning, Tool Calling, Vision, Prompt Caching |
 | `zai/glm-5.2-fast` | Blackbox AI | 192,000¹ | 128,000 | Fast Inference, Tool Calling, Vision, Prompt Caching |
 
-> ¹ Free pool via Vercel AI Gateway defaults to ~192k (max 202,752) on the non-`[1m]` variant; Vercel catalog reports 1,000,000 but free credits cannot access `zai/glm-5.2[1m]` (403 `customer_verification_required`). 1M requires paid credits. Verified: 192k OK, 195k+ → 413 `Request Entity Too Large`.
+> ¹ **Context Window Notice**: The free pool via Vercel AI Gateway defaults to ~192k (max 202,752) on the non-`[1m]` variant; Vercel catalog reports 1,000,000 but free credits cannot access `zai/glm-5.2[1m]` (403 `customer_verification_required`). 1M requires paid credits. Verified: 192k OK, 195k+ → 413 `Request Entity Too Large`.
+
+### 🧠 Thinking Levels (Reasoning Effort)
+
+The proxy includes automatic thinking effort normalization. You can pass reasoning levels via OpenAI `reasoning_effort`, Pi `thinkingLevel`, or Anthropic `thinking`, and the proxy smoothly normalizes them to upstream Vercel tiers:
+
+| Client Level (`reasoning_effort` / `thinkingLevel`) | Upstream Vercel Tier | Description |
+| :--- | :--- | :--- |
+| `off` | `none` | Base reasoning |
+| `minimal` / `low` / `medium` / `auto` | `auto` | ~200–400 reasoning tokens |
+| `high` | `high` | Deep reasoning (~500+ tokens) |
+| `xhigh` / `max` | `xhigh` | Full-budget maximum reasoning (Vercel's highest tier) |
 
 ---
 

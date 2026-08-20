@@ -30,7 +30,18 @@
 | `zai/glm-5.2` | Blackbox AI | 192,000¹ | 128,000 | 深度思考 (Reasoning)、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
 | `zai/glm-5.2-fast` | Blackbox AI | 192,000¹ | 128,000 | 极速响应、工具调用 (Tool Call)、多模态 (Vision)、前缀缓存 |
 
-> ¹ 免费池经 Vercel AI Gateway 默认 ~192k（上限 202,752，非 `[1m]` 变体）；Vercel 目录标 1,000,000 但免费额度无法访问 `zai/glm-5.2[1m]`（403 需绑卡），1M 需付费。实测：192k 正常，195k+ → 413 `Request Entity Too Large`。
+> ¹ **上下文说明**：免费池经 Vercel AI Gateway 默认 ~192k（上限 202,752，非 `[1m]` 变体）；Vercel 目录标 1,000,000 但免费额度无法访问 `zai/glm-5.2[1m]`（403 需绑卡），1M 需付费。实测：192k 正常，195k+ → 413 `Request Entity Too Large`。
+
+### 🧠 思考深度档位（Thinking Level / Reasoning Effort）
+
+反代内置了智能推理档位映射机制，支持直接通过 OpenAI `reasoning_effort`、Pi `thinkingLevel` 或 Anthropic `thinking` 字段调节推理深度，自动平滑归一化至上游 Vercel 规范：
+
+| 客户端档位 (Client Level) | 映射至上游 (Vercel Upstream) | 推理表现说明 |
+| :--- | :--- | :--- |
+| `off` | `none` | 基础思考模式 |
+| `minimal` / `low` / `medium` / `auto` | `auto` | 约 200~400 tokens 推理预算 |
+| `high` | `high` | 深度推理（约 500+ tokens） |
+| `xhigh` / `max` | `xhigh` | 满血超深度推理（Vercel 最高档位） |
 
 ---
 
