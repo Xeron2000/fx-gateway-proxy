@@ -5,7 +5,7 @@ from typing import List
 __version__ = "0.2.0"
 
 UPSTREAM_URL = os.environ.get("UPSTREAM_URL", "https://ai-gateway.vercel.sh/v3/ai/language-model")
-USER_AGENT = os.environ.get("FX_USER_AGENT", "fx/0.0.3")
+USER_AGENT = os.environ.get("FX_USER_AGENT", "fx/0.0.4")
 DEFAULT_KEY_PATH = Path.home() / ".fx" / "api-key"
 DEFAULT_HOST = os.environ.get("HOST", "127.0.0.1")
 DEFAULT_PORT = int(os.environ.get("PORT", "18080"))

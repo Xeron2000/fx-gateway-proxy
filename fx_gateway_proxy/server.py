@@ -1,3 +1,5 @@
+import hashlib
+import random
 import time
 import json
 import uuid
@@ -42,8 +44,10 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 def _backoff_delay(attempt: int) -> float:
-    """Exponential backoff: min(BASE_DELAY * 2^attempt, MAX_DELAY)."""
-    return min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+    """Exponential backoff with jitter, capped at MAX_DELAY (jitter folded in before cap)."""
+    base = BASE_DELAY * (2 ** attempt)
+    jitter = random.uniform(0.05, 0.25)
+    return round(min(base + jitter, MAX_DELAY), 3)
 
 
 async def _parse_json_body(request: Request):
@@ -505,10 +509,17 @@ def create_app() -> FastAPI:
         if not key_pool.keys:
             raise HTTPException(status_code=401, detail="Missing API Key. Provide via Authorization header, x-api-key header, AI_GATEWAY_API_KEYS / AI_GATEWAY_API_KEY env, or ~/.fx/api-key file.")
         headers_in = request.headers
-        session_id = headers_in.get("x-session-id") or headers_in.get("x-session-affinity") or headers_in.get("session_id") or headers_in.get("x-client-request-id") or f"pi-{uuid.uuid4().hex[:16]}"
+        session_id = headers_in.get("x-session-id") or headers_in.get("x-session-affinity") or headers_in.get("session_id") or headers_in.get("x-client-request-id")
+        if not session_id:
+            client_ip = request.client.host if request.client else "local"
+            auth_suffix = incoming_key[-8:] if incoming_key else "fx"
+            session_id = f"fx-{hashlib.md5(f'{client_ip}:{auth_suffix}'.encode()).hexdigest()[:16]}"
         prompt = convert_messages_to_v3(messages)
         v3_tools = convert_tools_to_v3(tools)
         v3_payload: Dict[str, Any] = {"prompt": prompt, "maxOutputTokens": max_tokens, "headers": {"user-agent": USER_AGENT, "x-title": "fx"}}
+        enable_fast = os.environ.get("FX_FAST_MODE", "1").lower() in ("1", "true", "yes")
+        if chat_body.get("speed") == "fast" or model.endswith("-fast") or enable_fast:
+            v3_payload["providerOptions"] = {"gateway": {"speed": "fast"}}
         if "temperature" in chat_body:
             v3_payload["temperature"] = float(chat_body["temperature"])
         if "top_p" in chat_body:
@@ -567,14 +578,15 @@ def create_app() -> FastAPI:
                         continue
                     raise
                 if response.status_code in RETRYABLE_STATUS and attempt + 1 < attempts:
+                    wait_time = _backoff_delay(attempt)
                     if response.status_code == 429:
                         key_pool.mark_failed(key)
-                        logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; backing off {_backoff_delay(attempt)}s")
+                        logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; backing off {wait_time}s")
                     else:
                         key_pool.mark_error(key)
                         logger.warning(f"fx: {response.status_code} error on key={mask_key(key)}; retrying next key")
                     await response.aclose()
-                    await asyncio.sleep(_backoff_delay(attempt))
+                    await asyncio.sleep(wait_time)
                     continue
                 break
             return response, key, t_start
@@ -683,14 +695,15 @@ def create_app() -> FastAPI:
                     continue
                 raise
             if response.status_code in RETRYABLE_STATUS and attempt + 1 < attempts:
+                wait_time = _backoff_delay(attempt)
                 if response.status_code == 429:
                     key_pool.mark_failed(key)
-                    logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; backing off")
+                    logger.warning(f"fx: 429 rate-limited on key={mask_key(key)}; backing off {wait_time}s")
                 else:
                     key_pool.mark_error(key)
                     logger.warning(f"fx: {response.status_code} error on key={mask_key(key)}; retrying next key")
                 await response.aclose()
-                await asyncio.sleep(_backoff_delay(attempt))
+                await asyncio.sleep(wait_time)
                 continue
             break
         async with _response_scope(response):
