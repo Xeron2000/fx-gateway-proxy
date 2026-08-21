@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 __version__ = "0.2.0"
 
@@ -80,4 +80,14 @@ def mask_key(key: str) -> str:
     if len(key) <= 8:
         return key[:2] + "***"
     return key[:7] + "..." + key[-4:]
+
+
+def get_proxy_url() -> Optional[str]:
+    """Read FX_PROXY (outbound HTTP proxy for Vercel). Default is direct."""
+    raw = os.environ.get("FX_PROXY", "").strip()
+    if not raw or raw.lower() in ("none", "off", "false", "0", "-"):
+        return None
+    if "://" not in raw:
+        raw = f"http://{raw}"
+    return raw
 
