@@ -55,6 +55,7 @@ The proxy includes automatic thinking effort normalization. You can pass reasoni
 - 🔌 **Triple Protocol Support**: `POST /v1/chat/completions` (OpenAI Chat), `POST /v1/responses` (OpenAI Responses), `POST /v1/messages` (Anthropic Messages) + `POST /v1/messages/count_tokens` — all share the same adaptive `KeyPool`, model aliasing (`claude-*`/`gpt-*` → `zai/glm-5.2(-fast)`) and `x-api-key`/`Authorization` auth.
 - 📊 **Live Stats Endpoint**: `GET /v1/stats` returns real-time masked metrics, loads, and cooldown states.
 - 🛡️ **Edge-Case Hardened**: Sanitizes empty user messages and structured multimodal payloads to prevent upstream validation errors.
+- 🌐 **Optional outbound proxy (`FX_PROXY`)**: local HTTP proxy for upstream Vercel calls. Default is direct (leave unset in Docker). Separate from `PROXY_API_KEY`.
 
 ---
 
@@ -90,6 +91,17 @@ export PROXY_API_KEY="your-custom-password"
 export PROXY_API_KEYS="token1,token2,token3"
 ```
 When configured, clients must pass this token via `Authorization: Bearer <token>` or `x-api-key: <token>`. The proxy validates the client token before routing the request to the upstream `KeyPool`.
+
+### Option D: Outbound HTTP Proxy (`FX_PROXY`)
+If this machine cannot reach `ai-gateway.vercel.sh` directly, set `FX_PROXY` or pass `--proxy`. Docker and public hosts should leave it unset.
+
+```bash
+export FX_PROXY="http://127.0.0.1:7890"
+# or
+fx-gateway-proxy --proxy http://127.0.0.1:7890
+```
+
+`FX_PROXY=none` forces direct. This is not `PROXY_API_KEY` (that one is the client access password).
 
 ---
 

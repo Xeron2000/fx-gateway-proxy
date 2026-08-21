@@ -56,6 +56,7 @@
 - 🛡️ **极限边界健壮性**：
   - 自动清洗客户端发送的空消息与空白字符，彻底避免 Vercel 400 校验错误；
   - 严格兼容 OpenAI 非流式响应规范，支持多轮工具调用闭环与 Prompt Caching 数据上报。
+- 🌐 **可选出站代理（`FX_PROXY`）**：本机访问不上 Vercel 时，给上游请求套一层 HTTP 代理。默认直连（Docker 不用配）。和 `PROXY_API_KEY`（客户端访问密码）不是一回事。
 
 ---
 
@@ -91,6 +92,17 @@ export PROXY_API_KEY="your-custom-password"
 export PROXY_API_KEYS="token1,token2,token3"
 ```
 配置后，客户端在调用时必须在 Authorization 中携带该密码（如 `Bearer your-custom-password` 或 `x-api-key: your-custom-password`），未授权请求将被直接拒绝（HTTP 401），鉴权通过后自动调度后端的上游多 Key 池。
+
+### 方式 D：出站 HTTP 代理（`FX_PROXY`）
+本机直连不上 `ai-gateway.vercel.sh` 时，可设 `FX_PROXY` 或传 `--proxy`。Docker / 公网部署保持不设即可。
+
+```bash
+export FX_PROXY="http://127.0.0.1:7890"
+# 或
+fx-gateway-proxy --proxy http://127.0.0.1:7890
+```
+
+`FX_PROXY=none` 强制直连。这和 `PROXY_API_KEY`（客户端访问密码）不是同一个变量。
 
 ---
 
