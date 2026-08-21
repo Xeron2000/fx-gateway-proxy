@@ -11,5 +11,8 @@ services:
       - PORT=18080
       - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
       - AI_GATEWAY_API_KEYS=${AI_GATEWAY_API_KEYS:-}
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
+      - PROXY_API_KEYS=${PROXY_API_KEYS:-}
     volumes:
       - ~/.fx:/root/.fx:ro
+

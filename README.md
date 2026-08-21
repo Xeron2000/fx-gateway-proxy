@@ -80,6 +80,17 @@ mkdir -p ~/.fx
 echo "vck_your_key" >> ~/.fx/api-key
 ```
 
+### 🔒 Option C: Public Deployment Access Protection (`PROXY_API_KEY`)
+When deploying on public networks (e.g. Hugging Face Spaces, VPS, Zeabur, Railway), set `PROXY_API_KEY` or `PROXY_API_KEYS` to require authentication and prevent unauthorized quota consumption:
+```bash
+# Single access key
+export PROXY_API_KEY="your-custom-password"
+
+# Multiple access keys (comma-separated)
+export PROXY_API_KEYS="token1,token2,token3"
+```
+When configured, clients must pass this token via `Authorization: Bearer <token>` or `x-api-key: <token>`. The proxy validates the client token before routing the request to the upstream `KeyPool`.
+
 ---
 
 ## 🚀 Step 2: Run the Proxy
@@ -100,13 +111,14 @@ docker run -d \
   ghcr.io/xeron2000/fx-gateway-proxy:latest
 ```
 
-#### Option B: Inject Multi-Key via Environment
+#### Option B: Inject Multi-Key & Proxy Password via Environment
 ```bash
 docker run -d \
   --name fx-gateway-proxy \
   --restart unless-stopped \
   -p 18080:18080 \
   -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2,vck_key3" \
+  -e PROXY_API_KEY="your-custom-password" \
   ghcr.io/xeron2000/fx-gateway-proxy:latest
 ```
 
@@ -125,6 +137,8 @@ services:
       - PORT=18080
       - AI_GATEWAY_API_KEYS=${AI_GATEWAY_API_KEYS:-}
       - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
+      - PROXY_API_KEYS=${PROXY_API_KEYS:-}
     volumes:
       - ~/.fx:/root/.fx:ro
 ```
@@ -132,6 +146,7 @@ Run:
 ```bash
 docker compose up -d
 ```
+
 
 ---
 

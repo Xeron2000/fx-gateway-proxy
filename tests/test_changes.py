@@ -285,6 +285,104 @@ class TestFastMode(_Base):
         self.assertNotIn("providerOptions", seen["payload"], "fast should NOT be injected when disabled")
 
 
+# ── 5. proxy authentication ──
+class TestProxyAuth(_Base):
+    def setUp(self):
+        super().setUp()
+        os.environ.pop("PROXY_API_KEY", None)
+        os.environ.pop("PROXY_API_KEYS", None)
+
+    def tearDown(self):
+        os.environ.pop("PROXY_API_KEY", None)
+        os.environ.pop("PROXY_API_KEYS", None)
+        super().tearDown()
+
+    def test_no_proxy_key_allows_dummy(self):
+        """When PROXY_API_KEY is unset, requests with dummy auth succeed."""
+        self._client(lambda req: _sse_ok())
+        async def go():
+            async with self._app() as c:
+                r = await c.post("/v1/chat/completions", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}]},
+                    headers={"Authorization": "Bearer dummy"})
+                self.assertEqual(r.status_code, 200)
+        self._run(go())
+
+    def test_proxy_key_blocks_unauthorized_requests(self):
+        """When PROXY_API_KEY is set, missing or wrong auth returns 401."""
+        os.environ["PROXY_API_KEY"] = "secret-pass"
+        self._client(lambda req: _sse_ok())
+        async def go():
+            async with self._app() as c:
+                # 1. No auth
+                r1 = await c.post("/v1/chat/completions", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}]})
+                self.assertEqual(r1.status_code, 401)
+                self.assertIn("Proxy API Key", r1.text)
+
+                # 2. Wrong auth
+                r2 = await c.post("/v1/chat/completions", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}]},
+                    headers={"Authorization": "Bearer wrong-pass"})
+                self.assertEqual(r2.status_code, 401)
+
+                # 3. Stats blocked without auth
+                r3 = await c.get("/v1/stats")
+                self.assertEqual(r3.status_code, 401)
+
+                # 4. Health endpoint remains public
+                r4 = await c.get("/health")
+                self.assertEqual(r4.status_code, 200)
+        self._run(go())
+
+    def test_proxy_key_valid_authenticates_and_uses_pool(self):
+        """Valid proxy key passes auth and routes through upstream pool."""
+        os.environ["PROXY_API_KEY"] = "secret-pass"
+        seen_upstream_auth = []
+        def res(req):
+            seen_upstream_auth.append(req.headers.get("authorization"))
+            return _sse_ok()
+        self._client(res)
+        async def go():
+            async with self._app() as c:
+                r = await c.post("/v1/chat/completions", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}]},
+                    headers={"Authorization": "Bearer secret-pass"})
+                self.assertEqual(r.status_code, 200)
+
+                # Anthropic messages with x-api-key
+                r_anthro = await c.post("/v1/messages", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 10},
+                    headers={"x-api-key": "secret-pass", "anthropic-version": "2023-06-01"})
+                self.assertEqual(r_anthro.status_code, 200)
+
+                # Stats with valid auth
+                r_stats = await c.get("/v1/stats", headers={"Authorization": "Bearer secret-pass"})
+                self.assertEqual(r_stats.status_code, 200)
+                self.assertEqual(r_stats.json()["total"], 2)
+        self._run(go())
+        # Upstream requests must receive real upstream keys (vck_a or vck_b), NOT proxy key!
+        for auth in seen_upstream_auth:
+            self.assertTrue(auth.startswith("Bearer vck_"), f"Upstream received wrong key: {auth}")
+
+    def test_multi_proxy_keys_allowed(self):
+        """Multiple comma-separated PROXY_API_KEYS are all valid."""
+        os.environ["PROXY_API_KEYS"] = "key1,key2"
+        self._client(lambda req: _sse_ok())
+        async def go():
+            async with self._app() as c:
+                r1 = await c.post("/v1/chat/completions", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}]},
+                    headers={"Authorization": "Bearer key1"})
+                self.assertEqual(r1.status_code, 200)
+
+                r2 = await c.post("/v1/chat/completions", json={
+                    "model": "zai/glm-5.2", "messages": [{"role": "user", "content": "hi"}]},
+                    headers={"Authorization": "Bearer key2"})
+                self.assertEqual(r2.status_code, 200)
+        self._run(go())
+
+
 # ── 4. monolith parity ──
 class TestMonolithParity(unittest.TestCase):
     def test_mono_backoff_has_jitter(self):
@@ -303,8 +401,6 @@ class TestMonolithParity(unittest.TestCase):
 
     def test_mono_has_fast_injection(self):
         import inspect
-        src = inspect.getsource(mono._proxy_chat if hasattr(mono, "_proxy_chat") else mono.create_app)
-        # _proxy_chat is nested in create_app; check the create_app source
         src = inspect.getsource(mono.create_app)
         self.assertIn("providerOptions", src)
         self.assertIn('gateway', src)
@@ -316,6 +412,14 @@ class TestMonolithParity(unittest.TestCase):
         self.assertIn("hashlib.md5", src)
         self.assertIn("auth_suffix", src)
 
+    def test_mono_has_proxy_auth(self):
+        import inspect
+        src = inspect.getsource(mono)
+        self.assertIn("PROXY_API_KEYS", src)
+        self.assertIn("get_proxy_keys", src)
+        self.assertIn("_check_auth", src)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

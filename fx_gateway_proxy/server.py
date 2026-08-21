@@ -21,6 +21,7 @@ from .config import (
     MAX_KEY_RETRIES,
     __version__,
     mask_key,
+    get_proxy_keys,
 )
 from .pool import get_key_pool
 from .converter import (
@@ -84,6 +85,20 @@ def _extract_auth(request: Request, authorization: Optional[str]) -> str:
         if a:
             return a
     return ""
+
+
+def _check_auth(request: Request, authorization: Optional[str] = None) -> str:
+    """Extract auth token and validate against PROXY_API_KEY(S) if configured."""
+    auth = _extract_auth(request, authorization)
+    proxy_keys = get_proxy_keys()
+    if proxy_keys:
+        if not auth or auth not in proxy_keys:
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized: invalid or missing Proxy API Key (PROXY_API_KEY)",
+            )
+    return auth
+
 
 
 # ── Responses helpers (pure) ──
@@ -485,13 +500,22 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "fx-gateway-proxy", "version": __version__}
 
     @app.get("/v1/models")
-    async def list_models():
+    async def list_models(request: Request, authorization: Optional[str] = Header(None)):
+        try:
+            _check_auth(request, authorization)
+        except HTTPException as e:
+            return JSONResponse(status_code=e.status_code, content={"error": {"message": e.detail, "type": "invalid_request_error", "code": e.status_code}})
         return {"object": "list", "data": list(MODELS)}
 
     @app.get("/v1/stats")
-    async def key_stats():
+    async def key_stats(request: Request, authorization: Optional[str] = Header(None)):
+        try:
+            _check_auth(request, authorization)
+        except HTTPException as e:
+            return JSONResponse(status_code=e.status_code, content={"error": {"message": e.detail, "type": "invalid_request_error", "code": e.status_code}})
         pool = get_key_pool()
         return {"keys": pool.stats(), "total": len(pool.keys)}
+
 
     # ── shared upstream executor ──
     async def _proxy_chat(chat_body: Dict[str, Any], request: Request, auth_raw: str):
@@ -771,8 +795,8 @@ def create_app() -> FastAPI:
         body, err = await _parse_json_body(request)
         if err:
             return err
-        auth = _extract_auth(request, authorization)
         try:
+            auth = _check_auth(request, authorization)
             result = await _proxy_chat(body, request, auth)
         except HTTPException as e:
             # map to OpenAI error shape
@@ -785,8 +809,8 @@ def create_app() -> FastAPI:
         if err:
             return err
         chat_body = _responses_to_chat_body(body)
-        auth = _extract_auth(request, authorization)
         try:
+            auth = _check_auth(request, authorization)
             result = await _proxy_chat(chat_body, request, auth)
         except HTTPException as e:
             return JSONResponse(status_code=e.status_code, content={"error": {"message": e.detail, "type": "invalid_request_error", "code": e.status_code}})
@@ -806,6 +830,10 @@ def create_app() -> FastAPI:
             body, err = await _parse_json_body(request)
             if err:
                 return err
+            try:
+                _check_auth(request, authorization or x_api_key)
+            except HTTPException as e:
+                return JSONResponse(status_code=e.status_code, content={"type": "error", "error": {"type": "authentication_error", "message": e.detail}})
             # handle both string and list content for anthropic messages
             def _count_text(c):
                 if isinstance(c, str):
@@ -834,15 +862,11 @@ def create_app() -> FastAPI:
             return err
         # anthropic-version header is optional for our proxy, but log if missing
         chat_body = _anthropic_to_chat_body(body)
-        # Anthropic sends x-api-key, not Authorization
-        auth = _extract_auth(request, authorization) or (x_api_key or "").strip()
-        # also allow Bearer in x-api-key
-        if auth.lower().startswith("bearer "):
-            auth = auth[7:].strip()
         try:
+            auth = _check_auth(request, authorization or x_api_key)
             result = await _proxy_chat(chat_body, request, auth)
         except HTTPException as e:
-            return JSONResponse(status_code=e.status_code, content={"type": "error", "error": {"type": "invalid_request_error", "message": e.detail}})
+            return JSONResponse(status_code=e.status_code, content={"type": "error", "error": {"type": "authentication_error", "message": e.detail}})
         if isinstance(result, StreamingResponse):
             return StreamingResponse(_chat_stream_to_anthropic_stream(result, body), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "anthropic-version": "2023-06-01"})
         if isinstance(result, Response):
@@ -857,6 +881,7 @@ def create_app() -> FastAPI:
             return JSONResponse(status_code=status, content={"type": "error", "error": {"type": "api_error", "message": msg}})
         anthro = _chat_to_anthropic(result, body)
         return anthro
+
 
     # Anthropic also expects GET /v1/models compatible? Keep existing.
 

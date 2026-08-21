@@ -27,9 +27,29 @@ MODELS = (
 )
 
 
+PROXY_KEYS_ENV = ("PROXY_API_KEYS", "PROXY_API_KEY")
+
+
+def get_proxy_keys() -> List[str]:
+    """Get list of allowed proxy client access keys from PROXY_API_KEYS / PROXY_API_KEY env."""
+    keys: List[str] = []
+    for env_name in PROXY_KEYS_ENV:
+        raw = os.environ.get(env_name, "")
+        if raw.strip():
+            keys.extend([p.strip() for p in raw.replace("\n", ",").split(",") if p.strip()])
+    seen = set()
+    out = []
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+            out.append(k)
+    return out
+
+
 def resolve_keys(explicit_key: str = "") -> List[str]:
     """Resolve API keys from explicit param, env (comma/newline separated multi-key), or ~/.fx/api-key file."""
-    if explicit_key and explicit_key.lower() not in PLACEHOLDER_KEYS:
+    proxy_keys = set(get_proxy_keys())
+    if explicit_key and explicit_key.lower() not in PLACEHOLDER_KEYS and explicit_key not in proxy_keys:
         return [explicit_key.strip()]
 
     def split_keys(raw: str) -> List[str]:
@@ -60,3 +80,4 @@ def mask_key(key: str) -> str:
     if len(key) <= 8:
         return key[:2] + "***"
     return key[:7] + "..." + key[-4:]
+

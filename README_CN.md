@@ -81,6 +81,17 @@ mkdir -p ~/.fx
 echo "vck_你的密钥" >> ~/.fx/api-key
 ```
 
+### 🔒 方式 C：公网部署访问防护（`PROXY_API_KEY`）
+当部署在公网环境（如 Hugging Face Spaces、VPS、Zeabur、Railway）时，可配置 `PROXY_API_KEY`（或多 Key 分隔 `PROXY_API_KEYS`）作为客户端访问密码，防止接口被公网扫描白嫖：
+```bash
+# 单密码
+export PROXY_API_KEY="your-custom-password"
+
+# 多密码（逗号分隔）
+export PROXY_API_KEYS="token1,token2,token3"
+```
+配置后，客户端在调用时必须在 Authorization 中携带该密码（如 `Bearer your-custom-password` 或 `x-api-key: your-custom-password`），未授权请求将被直接拒绝（HTTP 401），鉴权通过后自动调度后端的上游多 Key 池。
+
 ---
 
 ## 🚀 第二步：启动反向代理服务
@@ -101,13 +112,14 @@ docker run -d \
   ghcr.io/xeron2000/fx-gateway-proxy:latest
 ```
 
-#### 选项 B：环境变量注入多 Key 运行
+#### 选项 B：环境变量注入多 Key & 访问密码运行
 ```bash
 docker run -d \
   --name fx-gateway-proxy \
   --restart unless-stopped \
   -p 18080:18080 \
   -e AI_GATEWAY_API_KEYS="vck_key1,vck_key2,vck_key3" \
+  -e PROXY_API_KEY="your-custom-password" \
   ghcr.io/xeron2000/fx-gateway-proxy:latest
 ```
 
@@ -126,6 +138,8 @@ services:
       - PORT=18080
       - AI_GATEWAY_API_KEYS=${AI_GATEWAY_API_KEYS:-}
       - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
+      - PROXY_API_KEYS=${PROXY_API_KEYS:-}
     volumes:
       - ~/.fx:/root/.fx:ro
 ```
@@ -133,6 +147,7 @@ services:
 ```bash
 docker compose up -d
 ```
+
 
 ---
 
