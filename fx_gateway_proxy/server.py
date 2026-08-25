@@ -618,6 +618,7 @@ def create_app() -> FastAPI:
 
         async def stream_generator() -> AsyncGenerator[str, None]:
             stream_finished = False
+            key = ""
             try:
                 response, key, t_start = await _acquire_upstream()
                 async with _response_scope(response):
@@ -712,6 +713,7 @@ def create_app() -> FastAPI:
                 if not stream_finished:
                     guard_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
                     yield f"data: {json.dumps(guard_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
 
         if stream:
             return StreamingResponse(stream_generator(), media_type="text/event-stream")
