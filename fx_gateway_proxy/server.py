@@ -617,6 +617,7 @@ def create_app() -> FastAPI:
             return response, key, t_start
 
         async def stream_generator() -> AsyncGenerator[str, None]:
+            stream_finished = False
             try:
                 response, key, t_start = await _acquire_upstream()
                 async with _response_scope(response):
@@ -641,7 +642,6 @@ def create_app() -> FastAPI:
                         return
                     tool_call_indices: Dict[str, int] = {}
                     current_tool_idx = 0
-                    stream_finished = False
                     async for line in response.aiter_lines():
                         if await request.is_disconnected():
                             logger.info("Client disconnected early, terminating stream.")
@@ -701,6 +701,17 @@ def create_app() -> FastAPI:
             except asyncio.CancelledError:
                 logger.info("Stream task cancelled by client.")
                 raise
+            except httpx.RemoteProtocolError as e:
+                logger.warning(f"Upstream closed connection mid-stream on key={mask_key(key)}: {e}; sending graceful stop.")
+                if not stream_finished:
+                    guard_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                    yield f"data: {json.dumps(guard_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
+            except httpx.HTTPError as e:
+                logger.error(f"Stream HTTP error on key={mask_key(key)}: {e}; sending graceful stop.")
+                if not stream_finished:
+                    guard_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                    yield f"data: {json.dumps(guard_chunk)}\n\n"
 
         if stream:
             return StreamingResponse(stream_generator(), media_type="text/event-stream")
