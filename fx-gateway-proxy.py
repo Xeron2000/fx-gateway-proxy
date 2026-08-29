@@ -115,6 +115,33 @@ def mask_key(key: str) -> str:
         return key[:2] + "***"
     return key[:7] + "..." + key[-4:]
 
+
+def get_proxy_url() -> Optional[str]:
+    """Read FX_PROXY (outbound HTTP proxy for Vercel). Default is direct."""
+    raw = os.environ.get("FX_PROXY", "").strip()
+    if not raw or raw.lower() in ("none", "off", "false", "0", "-"):
+        return None
+    if "://" not in raw:
+        raw = f"http://{raw}"
+    return raw
+
+
+def create_http_client() -> httpx.AsyncClient:
+    """Shared upstream httpx client. trust_env=False so HTTP(S)_PROXY is ignored."""
+    kwargs: Dict[str, Any] = {
+        "timeout": httpx.Timeout(connect=15.0, read=300.0, write=30.0, pool=30.0),
+        "limits": httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=60.0),
+        "trust_env": False,
+    }
+    proxy = get_proxy_url()
+    if not proxy:
+        return httpx.AsyncClient(**kwargs)
+    try:
+        return httpx.AsyncClient(proxy=proxy, **kwargs)
+    except TypeError:
+        return httpx.AsyncClient(proxies=proxy, **kwargs)
+
+
 class KeyStats:
     """Per-key sliding-window statistics and learned rate-limit estimates."""
 
@@ -1231,8 +1258,8 @@ async def _response_scope(response):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global http_client
-    http_client = httpx.AsyncClient(timeout=httpx.Timeout(connect=15.0, read=300.0, write=30.0, pool=30.0), limits=httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=60.0))
-    logger.info("Shared HTTP connection pool initialized.")
+    http_client = create_http_client()
+    logger.info("Shared HTTP connection pool initialized (proxy=%s).", get_proxy_url() or "direct")
     yield
     if http_client:
         await http_client.aclose()
@@ -1327,7 +1354,7 @@ def create_app() -> FastAPI:
 
         req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created_ts = int(time.time())
-        client = http_client or httpx.AsyncClient(timeout=300.0)
+        client = http_client or create_http_client()
         # ponytail: retry budget is FX_MAX_KEY_RETRIES+1 regardless of pool size
         attempts = MAX_KEY_RETRIES + 1
 
@@ -1646,6 +1673,7 @@ def main() -> None:
     parser.add_argument("--host", default=DEFAULT_HOST, help=f"Host to bind (default: {DEFAULT_HOST})")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port to bind (default: {DEFAULT_PORT})")
     parser.add_argument("--api-key", default=None, help="Vercel AI Gateway API key (overrides AI_GATEWAY_API_KEY / ~/.fx/api-key)")
+    parser.add_argument("--proxy", default=None, help="HTTP proxy for upstream requests (env: FX_PROXY)")
     parser.add_argument("--log-level", default="info", choices=["debug", "info", "warning", "error"], help="Logging level (default: info)")
     parser.add_argument("--version", action="version", version=f"fx-gateway-proxy {__version__}")
 
@@ -1653,12 +1681,15 @@ def main() -> None:
 
     if args.api_key:
         os.environ["AI_GATEWAY_API_KEY"] = args.api_key.strip()
+    if args.proxy is not None:
+        os.environ["FX_PROXY"] = args.proxy.strip()
 
     logging.basicConfig(
         level=args.log_level.upper(),
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
-    logger.info(f"Starting FX Gateway Proxy on http://{args.host}:{args.port} ...")
+    proxy = get_proxy_url()
+    logger.info(f"Starting FX Gateway Proxy on http://{args.host}:{args.port} (proxy={proxy or 'direct'}) ...")
 
     uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
 

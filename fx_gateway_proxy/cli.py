@@ -3,7 +3,7 @@ import argparse
 import logging
 import uvicorn
 
-from .config import DEFAULT_HOST, DEFAULT_PORT, __version__
+from .config import DEFAULT_HOST, DEFAULT_PORT, __version__, get_proxy_url
 from .server import app
 
 logger = logging.getLogger("fx-gateway-proxy")
@@ -17,6 +17,7 @@ def main() -> None:
     parser.add_argument("--host", default=DEFAULT_HOST, help=f"Host to bind (default: {DEFAULT_HOST})")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port to bind (default: {DEFAULT_PORT})")
     parser.add_argument("--api-key", default=None, help="Vercel AI Gateway API key (overrides AI_GATEWAY_API_KEY / ~/.fx/api-key)")
+    parser.add_argument("--proxy", default=None, help="HTTP proxy for upstream requests (env: FX_PROXY)")
     parser.add_argument("--log-level", default="info", choices=["debug", "info", "warning", "error"], help="Logging level (default: info)")
     parser.add_argument("--version", action="version", version=f"fx-gateway-proxy {__version__}")
 
@@ -24,12 +25,15 @@ def main() -> None:
 
     if args.api_key:
         os.environ["AI_GATEWAY_API_KEY"] = args.api_key.strip()
+    if args.proxy is not None:
+        os.environ["FX_PROXY"] = args.proxy.strip()
 
     logging.basicConfig(
         level=args.log_level.upper(),
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
-    logger.info(f"Starting FX Gateway Proxy v{__version__} on http://{args.host}:{args.port} ...")
+    proxy = get_proxy_url()
+    logger.info(f"Starting FX Gateway Proxy v{__version__} on http://{args.host}:{args.port} (proxy={proxy or 'direct'}) ...")
 
     uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
 

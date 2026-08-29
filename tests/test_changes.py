@@ -3,6 +3,7 @@
   2. session_id is deterministic/persistent (client_ip + key suffix) when no header given
   3. providerOptions.gateway.speed=fast injected (default on; opt-out via FX_FAST_MODE=0)
   4. monolith fx-gateway-proxy.py mirrors the package behavior
+  5. FX_PROXY outbound proxy defaults to direct
 
 Run:  uv run python tests/test_changes.py
 """
@@ -383,6 +384,37 @@ class TestProxyAuth(_Base):
         self._run(go())
 
 
+# ── 6. outbound FX_PROXY ──
+class TestOutboundProxy(unittest.TestCase):
+    def setUp(self):
+        self._old = os.environ.get("FX_PROXY")
+        os.environ.pop("FX_PROXY", None)
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("FX_PROXY", None)
+        else:
+            os.environ["FX_PROXY"] = self._old
+
+    def test_unset_is_direct(self):
+        self.assertIsNone(config.get_proxy_url())
+        self.assertIsNone(mono.get_proxy_url())
+
+    def test_fx_proxy_url(self):
+        os.environ["FX_PROXY"] = "http://127.0.0.1:7890"
+        self.assertEqual(config.get_proxy_url(), "http://127.0.0.1:7890")
+        self.assertEqual(mono.get_proxy_url(), "http://127.0.0.1:7890")
+
+    def test_fx_proxy_none(self):
+        os.environ["FX_PROXY"] = "none"
+        self.assertIsNone(config.get_proxy_url())
+        self.assertIsNone(mono.get_proxy_url())
+
+    def test_bare_host_gets_http_scheme(self):
+        os.environ["FX_PROXY"] = "127.0.0.1:7890"
+        self.assertEqual(config.get_proxy_url(), "http://127.0.0.1:7890")
+
+
 # ── 4. monolith parity ──
 class TestMonolithParity(unittest.TestCase):
     def test_mono_backoff_has_jitter(self):
@@ -418,6 +450,13 @@ class TestMonolithParity(unittest.TestCase):
         self.assertIn("PROXY_API_KEYS", src)
         self.assertIn("get_proxy_keys", src)
         self.assertIn("_check_auth", src)
+
+    def test_mono_has_outbound_proxy(self):
+        import inspect
+        src = inspect.getsource(mono)
+        self.assertIn("FX_PROXY", src)
+        self.assertIn("get_proxy_url", src)
+        self.assertIn("trust_env", inspect.getsource(mono.create_http_client))
 
 
 if __name__ == "__main__":

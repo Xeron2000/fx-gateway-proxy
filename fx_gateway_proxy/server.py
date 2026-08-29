@@ -20,8 +20,9 @@ from .config import (
     MODELS,
     MAX_KEY_RETRIES,
     __version__,
-    mask_key,
     get_proxy_keys,
+    get_proxy_url,
+    mask_key,
 )
 from .pool import get_key_pool
 from .converter import (
@@ -42,6 +43,22 @@ http_client: Optional[httpx.AsyncClient] = None
 BASE_DELAY = float(os.environ.get("FX_BASE_DELAY", "0.8"))
 MAX_DELAY = float(os.environ.get("FX_MAX_DELAY", "20.0"))
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def create_http_client() -> httpx.AsyncClient:
+    """Shared upstream httpx client. trust_env=False so HTTP(S)_PROXY is ignored."""
+    kwargs: Dict[str, Any] = {
+        "timeout": httpx.Timeout(connect=15.0, read=300.0, write=30.0, pool=30.0),
+        "limits": httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=60.0),
+        "trust_env": False,
+    }
+    proxy = get_proxy_url()
+    if not proxy:
+        return httpx.AsyncClient(**kwargs)
+    try:
+        return httpx.AsyncClient(proxy=proxy, **kwargs)
+    except TypeError:
+        return httpx.AsyncClient(proxies=proxy, **kwargs)
 
 
 def _backoff_delay(attempt: int) -> float:
@@ -482,8 +499,8 @@ async def _response_scope(response):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global http_client
-    http_client = httpx.AsyncClient(timeout=httpx.Timeout(connect=15.0, read=300.0, write=30.0, pool=30.0), limits=httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=60.0))
-    logger.info("Shared HTTP connection pool initialized.")
+    http_client = create_http_client()
+    logger.info("Shared HTTP connection pool initialized (proxy=%s).", get_proxy_url() or "direct")
     yield
     if http_client:
         await http_client.aclose()
@@ -578,7 +595,7 @@ def create_app() -> FastAPI:
 
         req_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created_ts = int(time.time())
-        client = http_client or httpx.AsyncClient(timeout=300.0)
+        client = http_client or create_http_client()
         # ponytail: retry budget is FX_MAX_KEY_RETRIES+1 regardless of pool size
         attempts = MAX_KEY_RETRIES + 1
 
