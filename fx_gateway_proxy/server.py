@@ -43,6 +43,7 @@ http_client: Optional[httpx.AsyncClient] = None
 BASE_DELAY = float(os.environ.get("FX_BASE_DELAY", "0.8"))
 MAX_DELAY = float(os.environ.get("FX_MAX_DELAY", "20.0"))
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+PROMPT_TOO_LONG_MESSAGE = "Prompt is too long: input tokens exceed the context window limit"
 
 
 def create_http_client() -> httpx.AsyncClient:
@@ -633,6 +634,8 @@ def create_app() -> FastAPI:
             return response, key, t_start
 
         async def stream_generator() -> AsyncGenerator[str, None]:
+            stream_finished = False
+            key = ""
             try:
                 response, key, t_start = await _acquire_upstream()
                 async with _response_scope(response):
@@ -646,12 +649,17 @@ def create_app() -> FastAPI:
                             key_pool.mark_error(key)
                         # ponytail: emit error in `error` field + standard finish_reason=stop so clients
                         # treat it as a failure rather than model text. (SSE already started; status stays 200.)
-                        err_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "error": {"message": f"Gateway Error {response.status_code}: {err_msg}", "type": "upstream_error", "code": response.status_code}}
+                        if response.status_code == 413:
+                            err_type = "invalid_request_error"
+                            err_message = PROMPT_TOO_LONG_MESSAGE
+                        else:
+                            err_type = "upstream_error"
+                            err_message = f"Gateway Error {response.status_code}: {err_msg}"
+                        err_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "error": {"message": err_message, "type": err_type, "code": response.status_code}}
                         yield f"data: {json.dumps(err_chunk)}\n\n"
                         return
                     tool_call_indices: Dict[str, int] = {}
                     current_tool_idx = 0
-                    stream_finished = False
                     async for line in response.aiter_lines():
                         if await request.is_disconnected():
                             logger.info("Client disconnected early, terminating stream.")
@@ -711,6 +719,18 @@ def create_app() -> FastAPI:
             except asyncio.CancelledError:
                 logger.info("Stream task cancelled by client.")
                 raise
+            except httpx.RemoteProtocolError as e:
+                logger.warning(f"Upstream closed connection mid-stream on key={mask_key(key)}: {e}; sending graceful stop.")
+                if not stream_finished:
+                    guard_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                    yield f"data: {json.dumps(guard_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
+            except httpx.HTTPError as e:
+                logger.error(f"Stream HTTP error on key={mask_key(key)}: {e}; sending graceful stop.")
+                if not stream_finished:
+                    guard_chunk = {"id": req_id, "object": "chat.completion.chunk", "created": created_ts, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+                    yield f"data: {json.dumps(guard_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
 
         if stream:
             return StreamingResponse(stream_generator(), media_type="text/event-stream")
@@ -760,6 +780,8 @@ def create_app() -> FastAPI:
                     err_msg = err_json.get("error", {}).get("message") or err_str
                 except Exception:
                     err_msg = err_str
+                if response.status_code == 413:
+                    return JSONResponse(status_code=413, content={"error": {"message": PROMPT_TOO_LONG_MESSAGE, "type": "invalid_request_error", "code": 413}})
                 return JSONResponse(status_code=response.status_code, content={"error": {"message": err_msg, "type": "upstream_error", "code": response.status_code}})
             finish_reason = "stop"
             async for line in response.aiter_lines():
@@ -895,6 +917,8 @@ def create_app() -> FastAPI:
                 msg = j.get("error", {}).get("message") or j.get("error") or raw.decode(errors="replace")[:500]
             except Exception:
                 msg = "upstream error"
+            if status == 413:
+                return JSONResponse(status_code=413, content={"type": "error", "error": {"type": "invalid_request_error", "message": PROMPT_TOO_LONG_MESSAGE}})
             return JSONResponse(status_code=status, content={"type": "error", "error": {"type": "api_error", "message": msg}})
         anthro = _chat_to_anthropic(result, body)
         return anthro
